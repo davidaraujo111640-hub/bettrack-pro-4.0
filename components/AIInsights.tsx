@@ -9,9 +9,14 @@ interface AIInsightsProps {
 
 const AIInsights: React.FC<AIInsightsProps> = ({ bets }) => {
   const [insight, setInsight] = useState<string | null>(null);
-  const [sources, setSources] = useState<any[]>([]);
+  const [sources, setSources] = useState<{ web?: { uri: string; title?: string } }[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasKey, setHasKey] = useState<boolean | null>(null);
+  const [selectedSport, setSelectedSport] = useState<string>('ALL');
+  const [selectedBookmaker, setSelectedBookmaker] = useState<string>('ALL');
+
+  const sports = Array.from(new Set(bets.map(b => b.sport))).sort();
+  const bookmakers = Array.from(new Set(bets.map(b => b.bookmaker))).sort();
 
   React.useEffect(() => {
     const checkKey = async () => {
@@ -54,16 +59,31 @@ const AIInsights: React.FC<AIInsightsProps> = ({ bets }) => {
 
       const ai = new GoogleGenAI({ apiKey });
       
+      const filteredBets = bets.filter(b => 
+        (selectedSport === 'ALL' || b.sport === selectedSport) &&
+        (selectedBookmaker === 'ALL' || b.bookmaker === selectedBookmaker)
+      );
+
+      const focusText = [];
+      if (selectedSport !== 'ALL') focusText.push(`deporte: ${selectedSport}`);
+      if (selectedBookmaker !== 'ALL') focusText.push(`casa de apuestas: ${selectedBookmaker}`);
+      const focusMessage = focusText.length > 0 ? `Céntrate especialmente en el análisis de ${focusText.join(' y ')}.` : '';
+
       const prompt = `Actúa como un experto analista de apuestas profesional (Tipster Pro). 
-      Analiza mi historial reciente de apuestas: ${JSON.stringify(bets.slice(0, 50))}. 
+      Analiza mi historial reciente de apuestas: ${JSON.stringify(filteredBets.slice(0, 50))}. 
+      ${focusMessage}
       
       Instrucciones:
-      1. Evalúa el ROI y el Yield actual.
-      2. Identifica patrones ganadores (deportes, cuotas o casas de apuestas donde soy más rentable).
-      3. Señala errores críticos (ej: exceso de riesgo/stake, apuestas a cuotas sin valor).
-      4. Usa la herramienta de búsqueda para darme consejos sobre eventos deportivos actuales que encajen con mi perfil.
+      1. Evalúa el ROI y el Yield actual para este conjunto de datos. Usa el emoji 📈.
+      2. Identifica patrones ganadores (cuotas o mercados específicos donde soy más rentable). Usa el emoji 🎯.
+      3. Señala errores críticos (ej: exceso de riesgo/stake, apuestas a cuotas sin valor). Usa el emoji ⚠️.
+      4. Usa la herramienta de búsqueda para darme consejos sobre eventos deportivos actuales que encajen con mi perfil y los filtros seleccionados. Usa el emoji 💡.
       
-      Responde en español con un tono motivador pero profesional. Usa formato Markdown con negritas y listas.`;
+      IMPORTANTE: 
+      - Responde en español con un tono motivador pero profesional.
+      - NO uses negritas con asteriscos (ej: **texto**). 
+      - Usa EMOJIS al inicio de cada punto clave para que sea visualmente atractivo.
+      - Estructura la respuesta con títulos claros usando #.`;
 
       const response = await ai.models.generateContent({ 
         model: 'gemini-3-flash-preview', 
@@ -79,11 +99,12 @@ const AIInsights: React.FC<AIInsightsProps> = ({ bets }) => {
       
       // Always extract URLs from groundingChunks as per Search Grounding guidelines.
       if (response.candidates?.[0]?.groundingMetadata?.groundingChunks) {
-        setSources(response.candidates[0].groundingMetadata.groundingChunks);
+        setSources(response.candidates[0].groundingMetadata.groundingChunks as { web?: { uri: string; title?: string } }[]);
       }
-    } catch (error: any) {
-      console.error("AI Error:", error);
-      if (error.message?.includes("API Key") || error.message?.includes("API_KEY")) {
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("AI Error:", err);
+      if (err.message?.includes("API Key") || err.message?.includes("API_KEY")) {
         setInsight("Error: La clave API no está configurada. Por favor, asegúrate de tener una clave válida.");
         if (window.aistudio) {
             setHasKey(false);
@@ -96,6 +117,43 @@ const AIInsights: React.FC<AIInsightsProps> = ({ bets }) => {
     }
   };
 
+  const renderInsightLine = (line: string, index: number) => {
+    if (!line.trim()) return null;
+
+    // Header styling
+    if (line.startsWith('#')) {
+      return (
+        <h3 key={index} className="text-xl font-black text-white mt-8 mb-4 flex items-center gap-3 border-b border-white/5 pb-2">
+          <span className="w-1.5 h-6 bg-[#ffcc00] rounded-full"></span>
+          {line.replace(/^#+\s*/, '')}
+        </h3>
+      );
+    }
+
+    // List item or emoji line styling
+    const emojiRegex = /^([\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}])/u;
+    const match = line.match(emojiRegex);
+
+    if (match) {
+      return (
+        <div key={index} className="bg-white/5 border border-white/5 p-4 rounded-2xl mb-3 hover:bg-white/10 transition-all group">
+          <div className="flex gap-3">
+            <span className="text-xl group-hover:scale-125 transition-transform">{match[1]}</span>
+            <p className="text-slate-300 font-medium leading-relaxed">
+              {line.replace(emojiRegex, '').trim()}
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <p key={index} className="text-slate-400 font-medium leading-relaxed mb-4 pl-4 border-l border-white/5">
+        {line}
+      </p>
+    );
+  };
+
   return (
     <div className="space-y-8 px-4 md:px-0 pb-20">
       <header className="flex flex-col sm:flex-row items-center justify-between bg-zinc-900/50 p-6 rounded-[2rem] border border-white/5 gap-4">
@@ -105,18 +163,40 @@ const AIInsights: React.FC<AIInsightsProps> = ({ bets }) => {
           </h2>
           <p className="text-slate-500 text-sm font-bold mt-1">Análisis táctico basado en tus datos reales.</p>
         </div>
-        <button 
-          onClick={generateInsights} 
-          disabled={isLoading || bets.length < 3} 
-          className="w-full sm:w-auto bg-gradient-to-r from-[#e2001a] to-[#ffcc00] text-black font-black px-8 py-4 rounded-2xl disabled:opacity-30 hover:scale-105 active:scale-95 transition-all shadow-lg shadow-red-900/20"
-        >
-          {isLoading ? (
-            <div className="flex items-center justify-center gap-2">
-              <i className="fas fa-circle-notch fa-spin"></i>
-              <span>Escaneando...</span>
-            </div>
-          ) : 'Generar Reporte Pro'}
-        </button>
+        
+        <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+          <div className="flex gap-2 w-full sm:w-auto">
+            <select 
+              value={selectedSport}
+              onChange={(e) => setSelectedSport(e.target.value)}
+              className="bg-zinc-800 border border-white/10 text-white text-xs font-bold rounded-xl px-3 py-2 outline-none focus:border-[#ffcc00]/50 transition-all flex-1 sm:flex-none"
+            >
+              <option value="ALL">Todos los Deportes</option>
+              {sports.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <select 
+              value={selectedBookmaker}
+              onChange={(e) => setSelectedBookmaker(e.target.value)}
+              className="bg-zinc-800 border border-white/10 text-white text-xs font-bold rounded-xl px-3 py-2 outline-none focus:border-[#ffcc00]/50 transition-all flex-1 sm:flex-none"
+            >
+              <option value="ALL">Todas las Casas</option>
+              {bookmakers.map(b => <option key={b} value={b}>{b}</option>)}
+            </select>
+          </div>
+          
+          <button 
+            onClick={generateInsights} 
+            disabled={isLoading || bets.length < 3} 
+            className="w-full sm:w-auto bg-gradient-to-r from-[#e2001a] to-[#ffcc00] text-black font-black px-8 py-4 rounded-2xl disabled:opacity-30 hover:scale-105 active:scale-95 transition-all shadow-lg shadow-red-900/20"
+          >
+            {isLoading ? (
+              <div className="flex items-center justify-center gap-2">
+                <i className="fas fa-circle-notch fa-spin"></i>
+                <span>Escaneando...</span>
+              </div>
+            ) : 'Generar Reporte Pro'}
+          </button>
+        </div>
       </header>
 
       <div className="glass-panel p-8 lg:p-12 rounded-[2.5rem] border-[#ffcc00]/10 min-h-[400px] relative overflow-hidden">
@@ -128,17 +208,13 @@ const AIInsights: React.FC<AIInsightsProps> = ({ bets }) => {
         )}
 
         {insight ? (
-          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <div className="prose prose-invert max-w-none text-slate-300 font-medium leading-relaxed prose-headings:text-white prose-strong:text-[#ffcc00] prose-p:mb-4">
-              {insight.split('\n').map((line, i) => (
-                <p key={i} className={line.startsWith('#') ? 'text-xl font-black text-white mt-6 mb-2' : ''}>
-                  {line.replace(/^#+\s*/, '')}
-                </p>
-              ))}
+          <div className="space-y-2 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <div className="max-w-none">
+              {insight.split('\n').map((line, i) => renderInsightLine(line, i))}
             </div>
             
             {sources.length > 0 && (
-              <div className="pt-8 border-t border-white/5">
+              <div className="pt-8 mt-8 border-t border-white/5">
                 <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4 italic">Fuentes de mercado consultadas</h4>
                 <div className="flex flex-wrap gap-2">
                   {sources.map((src, i) => src.web && (

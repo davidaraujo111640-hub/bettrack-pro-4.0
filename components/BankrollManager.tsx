@@ -111,7 +111,7 @@ const BankrollManager: React.FC<BankrollManagerProps> = ({ bankrolls, bets, acti
         } else {
           alert('El archivo no tiene el formato correcto de BetTrack.');
         }
-      } catch (err) {
+      } catch {
         alert('Error al leer el archivo.');
       }
     };

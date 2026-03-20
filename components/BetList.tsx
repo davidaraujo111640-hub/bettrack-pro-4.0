@@ -1,7 +1,9 @@
 
 import React, { useState, useMemo } from 'react';
 import { Bet, BetStatus } from '../types';
-import { getSportIcon } from './Dashboard';
+import { getSportIcon } from '../src/utils/icons';
+import { getBookmakerBrand } from '../src/utils/bookmakers';
+import { renderBookmakerName } from '../src/utils/bookmakerStyles';
 
 interface BetListProps {
   bets: Bet[];
@@ -26,8 +28,20 @@ const formatStatusText = (status: BetStatus): string => {
 const BetList: React.FC<BetListProps> = ({ bets, activeBankrollName, onDelete, onUpdateStatus, onEdit }) => {
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [bookmakerFilter, setBookmakerFilter] = useState<string>('ALL');
+  const [grouping, setGrouping] = useState<'NONE' | 'DAY' | 'WEEK' | 'MONTH' | 'YEAR'>('MONTH');
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [betToDelete, setBetToDelete] = useState<string | null>(null);
+  const [visibleColumns, setVisibleColumns] = useState({
+    sportIcon: true,
+    bookmaker: true,
+    date: true,
+    odds: true,
+    stake: true,
+    profit: true,
+    actions: true
+  });
+  const [showColumnSettings, setShowColumnSettings] = useState(false);
 
   // Extraer casas únicas de las apuestas actuales para el filtro
   const availableBookmakers = useMemo(() => {
@@ -56,18 +70,74 @@ const BetList: React.FC<BetListProps> = ({ bets, activeBankrollName, onDelete, o
     };
   }, [filteredBets]);
 
+  const groupedBets = useMemo(() => {
+    if (grouping === 'NONE') return { 'Todas las apuestas': { bets: filteredBets, profit: quickStats.profit, stake: filteredBets.reduce((acc, b) => acc + (b.status !== BetStatus.PENDING ? b.stake : 0), 0) } };
+
+    const groups: Record<string, { bets: Bet[]; profit: number; stake: number }> = {};
+    
+    // Sort bets by date descending before grouping
+    const sortedBets = [...filteredBets].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    sortedBets.forEach(bet => {
+      const date = new Date(bet.date);
+      let key = '';
+
+      if (grouping === 'DAY') {
+        key = date.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+        key = key.charAt(0).toUpperCase() + key.slice(1);
+      } else if (grouping === 'WEEK') {
+        const firstDayOfYear = new Date(date.getFullYear(), 0, 1);
+        const pastDaysOfYear = (date.getTime() - firstDayOfYear.getTime()) / 86400000;
+        const weekNum = Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
+        key = `Semana ${weekNum} - ${date.getFullYear()}`;
+      } else if (grouping === 'MONTH') {
+        key = date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+        key = key.charAt(0).toUpperCase() + key.slice(1);
+      } else if (grouping === 'YEAR') {
+        key = `Año ${date.getFullYear()}`;
+      }
+
+      if (!groups[key]) groups[key] = { bets: [], profit: 0, stake: 0 };
+      groups[key].bets.push(bet);
+      if (bet.status !== BetStatus.PENDING) {
+        groups[key].profit += bet.profit;
+        groups[key].stake += bet.stake;
+      }
+    });
+
+    return groups;
+  }, [filteredBets, grouping, quickStats.profit]);
+
+  const toggleGroup = (groupName: string) => {
+    setCollapsedGroups(prev => ({
+      ...prev,
+      [groupName]: !prev[groupName]
+    }));
+  };
+
+  const toggleAllGroups = () => {
+    const allGroups = Object.keys(groupedBets);
+    const someExpanded = allGroups.some(g => !collapsedGroups[g]);
+    
+    const newState: Record<string, boolean> = {};
+    allGroups.forEach(g => {
+      newState[g] = someExpanded; // If some are expanded, collapse all.
+    });
+    setCollapsedGroups(newState);
+  };
+
   const getRowHighlightClass = (status: BetStatus) => {
     switch (status) {
       case BetStatus.WON: 
-        return 'bg-emerald-500/[0.07] border-emerald-500/20 shadow-[0_0_40px_rgba(16,185,129,0.05)]';
+        return 'bg-emerald-500/[0.07] border-emerald-500/20 shadow-[0_0_20px_rgba(16,185,129,0.03)]';
       case BetStatus.LOST: 
-        return 'bg-red-500/[0.07] border-red-500/20 shadow-[0_0_40px_rgba(226,0,26,0.05)]';
+        return 'bg-red-500/[0.07] border-red-500/20 shadow-[0_0_20px_rgba(226,0,26,0.03)]';
       case BetStatus.CASH_OUT: 
-        return 'bg-yellow-500/[0.07] border-yellow-500/20 shadow-[0_0_40px_rgba(234,179,8,0.05)]';
+        return 'bg-yellow-500/[0.07] border-yellow-500/20 shadow-[0_0_20px_rgba(234,179,8,0.03)]';
       case BetStatus.REFUNDED: 
-        return 'bg-blue-500/[0.07] border-blue-500/20 shadow-[0_0_40px_rgba(59,130,246,0.05)]';
+        return 'bg-blue-500/[0.07] border-blue-500/20 shadow-[0_0_20px_rgba(59,130,246,0.03)]';
       case BetStatus.PENDING: 
-        return 'bg-white/[0.03] border-white/10 shadow-[0_0_40px_rgba(255,255,255,0.02)]';
+        return 'bg-white/[0.03] border-white/10 shadow-[0_0_20px_rgba(255,255,255,0.01)]';
       default: 
         return 'bg-zinc-900/20 border-white/5';
     }
@@ -101,11 +171,75 @@ const BetList: React.FC<BetListProps> = ({ bets, activeBankrollName, onDelete, o
                 value={bookmakerFilter}
                 onChange={(e) => setBookmakerFilter(e.target.value)}
               >
-                <option value="all">Todas las Casas</option>
+                <option value="ALL">Todas las Casas</option>
                 {availableBookmakers.map(book => (
                     <option key={book} value={book}>{book}</option>
                 ))}
               </select>
+
+              {/* Agrupación */}
+              <div className="flex gap-2">
+                <select 
+                  className="bg-zinc-950 border border-white/5 rounded-2xl px-4 py-3 text-xs font-bold text-slate-400 outline-none focus:border-[#e2001a]/50"
+                  value={grouping}
+                  onChange={(e) => setGrouping(e.target.value as 'NONE' | 'DAY' | 'WEEK' | 'MONTH' | 'YEAR')}
+                >
+                  <option value="NONE">Sin agrupar</option>
+                  <option value="DAY">Por Día</option>
+                  <option value="WEEK">Por Semana</option>
+                  <option value="MONTH">Por Mes</option>
+                  <option value="YEAR">Por Año</option>
+                </select>
+                
+                {grouping !== 'NONE' && (
+                  <button 
+                    onClick={toggleAllGroups}
+                    className="bg-zinc-950 border border-white/5 rounded-2xl px-4 py-3 text-xs font-bold text-slate-400 hover:text-white hover:border-white/20 transition-all"
+                    title={Object.values(collapsedGroups).some(v => !v) ? "Colapsar todo" : "Expandir todo"}
+                  >
+                    <i className={`fas ${Object.keys(groupedBets).length > 0 && Object.keys(groupedBets).every(g => collapsedGroups[g]) ? 'fa-expand-arrows-alt' : 'fa-compress-arrows-alt'}`}></i>
+                  </button>
+                )}
+
+                <div className="relative">
+                  <button 
+                    onClick={() => setShowColumnSettings(!showColumnSettings)}
+                    className="bg-zinc-950 border border-white/5 rounded-2xl px-4 py-3 text-xs font-bold text-slate-400 hover:text-white hover:border-white/20 transition-all"
+                    title="Configurar columnas"
+                  >
+                    <i className="fas fa-columns"></i>
+                  </button>
+
+                  {showColumnSettings && (
+                    <div className="absolute right-0 mt-2 w-48 bg-zinc-950 border border-white/10 rounded-2xl p-4 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-200">
+                      <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">Columnas Visibles</p>
+                      <div className="space-y-2">
+                        {Object.entries(visibleColumns).map(([key, value]) => (
+                          <label key={key} className="flex items-center gap-3 cursor-pointer group">
+                            <input 
+                              type="checkbox" 
+                              checked={value}
+                              onChange={() => setVisibleColumns(prev => ({ ...prev, [key]: !value }))}
+                              className="hidden"
+                            />
+                            <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${value ? 'bg-[#e2001a] border-[#e2001a]' : 'border-white/20'}`}>
+                              {value && <i className="fas fa-check text-[8px] text-white"></i>}
+                            </div>
+                            <span className="text-[10px] font-bold text-slate-400 group-hover:text-white transition-colors capitalize">
+                              {key === 'sportIcon' ? 'Icono Deporte' : 
+                               key === 'bookmaker' ? 'Casa' : 
+                               key === 'date' ? 'Fecha' : 
+                               key === 'odds' ? 'Cuota' : 
+                               key === 'stake' ? 'Apuesta' : 
+                               key === 'profit' ? 'Beneficio' : 'Acciones'}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
           </div>
         </div>
 
@@ -144,60 +278,147 @@ const BetList: React.FC<BetListProps> = ({ bets, activeBankrollName, onDelete, o
         </div>
       </header>
 
-      <div className="grid grid-cols-1 gap-4">
-        {filteredBets.length > 0 ? filteredBets.map(bet => (
-          <div 
-            key={bet.id} 
-            className={`glass-panel rounded-[2.5rem] p-6 flex flex-col lg:flex-row items-center gap-6 group hover:border-white/30 transition-all ${getRowHighlightClass(bet.status)}`}
-          >
-            <div className="flex items-center gap-5 flex-1 w-full">
-              <div className="w-16 h-16 rounded-[1.5rem] bg-zinc-950 border border-white/5 flex items-center justify-center text-3xl text-slate-300 shadow-inner">
-                  {getSportIcon(bet.sport)}
-              </div>
-              
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-3 mb-1.5 flex-wrap">
-                  <span className="text-[9px] font-black text-[#ffcc00] uppercase tracking-widest bg-[#ffcc00]/10 border border-[#ffcc00]/20 px-2 py-0.5 rounded-lg">{bet.bookmaker}</span>
-                  <span className="text-[9px] font-bold text-slate-500 uppercase tracking-tighter">{new Date(bet.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}</span>
+      <div className="space-y-8">
+        {Object.keys(groupedBets).length > 0 ? Object.entries(groupedBets).map(([groupName, groupData]) => (
+          <div key={groupName} className="space-y-4">
+            {grouping !== 'NONE' && (
+              <div 
+                className="flex items-center justify-between gap-4 px-4 py-3 bg-zinc-900/80 backdrop-blur-md border border-white/5 rounded-2xl cursor-pointer hover:bg-zinc-900/90 transition-all group/header sticky top-4 z-10 shadow-lg"
+                onClick={() => toggleGroup(groupName)}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-6 h-6 rounded-lg flex items-center justify-center transition-transform duration-300 ${collapsedGroups[groupName] ? '-rotate-90' : ''}`}>
+                    <i className="fas fa-chevron-down text-[10px] text-slate-500"></i>
+                  </div>
+                  <h3 className="text-[10px] font-black text-white uppercase tracking-[0.2em]">{groupName}</h3>
                 </div>
-                <h4 className="font-black text-lg text-white leading-tight truncate uppercase italic tracking-tight">{bet.description || bet.sport}</h4>
+                
+                <div className="flex items-center gap-6">
+                  <div className="flex items-center gap-6 hidden sm:flex">
+                    <div className="flex flex-col items-end">
+                      <span className="text-[7px] font-black text-zinc-500 uppercase tracking-widest">Yield</span>
+                      <span className={`text-sm font-black ${groupData.stake > 0 ? (groupData.profit >= 0 ? 'text-emerald-400' : 'text-[#e2001a]') : 'text-slate-500'}`}>
+                        {groupData.stake > 0 ? (groupData.profit / groupData.stake * 100).toFixed(1) : '0.0'}%
+                      </span>
+                    </div>
+                    <div className="w-px h-8 bg-white/10"></div>
+                  </div>
+                  
+                  <div className="flex flex-col items-end">
+                    <span className="text-[7px] font-black text-zinc-500 uppercase tracking-widest">Profit Periodo</span>
+                    <span className={`text-lg font-black tracking-tighter ${groupData.profit >= 0 ? 'text-emerald-400' : 'text-[#e2001a]'}`}>
+                      {groupData.profit >= 0 ? '+' : ''}{groupData.profit.toFixed(2)}€
+                    </span>
+                  </div>
+                  <div className="w-px h-8 bg-white/10"></div>
+                  <div className="bg-zinc-950 px-2 py-1 rounded-lg border border-white/5">
+                    <span className="text-[9px] font-black text-slate-400">{groupData.bets.length} OPS</span>
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
+            
+            {!collapsedGroups[groupName] && (
+              <div className="grid grid-cols-1 gap-4 animate-in fade-in slide-in-from-top-1 duration-300">
+                {groupData.bets.map(bet => (
+                  <div 
+                    key={bet.id} 
+                    className={`glass-panel rounded-2xl p-3 flex flex-col lg:flex-row items-center gap-3 group hover:border-white/30 transition-all ${getRowHighlightClass(bet.status)}`}
+                  >
+                    <div className="flex items-center gap-3 flex-1 w-full">
+                      {visibleColumns.sportIcon && (
+                        <div className="w-12 h-12 rounded-xl bg-zinc-950 border border-white/5 flex items-center justify-center text-xl text-slate-300 shadow-inner shrink-0">
+                            {getSportIcon(bet.sport)}
+                        </div>
+                      )}
+                      
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                          {visibleColumns.bookmaker && (() => {
+                            const brand = getBookmakerBrand(bet.bookmaker);
+                            return (
+                              <div 
+                                className="relative flex items-center justify-center px-2 py-0.5 rounded-md shadow-sm border border-white/5 transition-all hover:scale-105 min-w-[80px] h-8 overflow-hidden"
+                                style={{ backgroundColor: brand.color }}
+                              >
+                                <span 
+                                  className="text-[11px] font-black uppercase tracking-tighter whitespace-nowrap"
+                                  style={{ color: brand.textColor }}
+                                >
+                                  {renderBookmakerName(bet.bookmaker)}
+                                </span>
+                                <img 
+                                  src={brand.logo} 
+                                  alt={bet.bookmaker} 
+                                  className="absolute inset-0 w-full h-full object-contain p-0.5 bg-inherit rounded-md opacity-0 transition-opacity duration-300"
+                                  style={{ filter: brand.logoFilter }}
+                                  referrerPolicy="no-referrer"
+                                  onLoad={(e) => {
+                                    (e.target as HTMLImageElement).classList.remove('opacity-0');
+                                    (e.target as HTMLImageElement).classList.add('opacity-100');
+                                  }}
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).style.display = 'none';
+                                  }}
+                                />
+                              </div>
+                            );
+                          })()}
+                          {visibleColumns.date && (
+                            <span className="text-[8px] font-bold text-slate-500 uppercase tracking-tighter">{new Date(bet.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}</span>
+                          )}
+                        </div>
+                        <h4 className="font-black text-sm text-white leading-tight truncate uppercase italic tracking-tight">{bet.description || bet.sport}</h4>
+                      </div>
+                    </div>
 
-            <div className="flex gap-12 border-x border-white/5 px-10 hidden lg:flex">
-              <div className="text-center">
-                <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Cuota</p>
-                <p className="text-xl font-black text-white">{bet.odds.toFixed(2)}</p>
+                    <div className="flex gap-4 border-x border-white/5 px-4 hidden lg:flex items-center">
+                      {visibleColumns.odds && (
+                        <div className="text-center bg-zinc-950/40 border border-white/10 px-3 py-1.5 rounded-xl relative overflow-hidden group/odds shadow-inner min-w-[60px]">
+                          <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-50"></div>
+                          <p className="text-[7px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-0.5 relative z-10">Cuota</p>
+                          <p className="text-base font-black text-white tracking-tighter relative z-10">{bet.odds.toFixed(2)}</p>
+                        </div>
+                      )}
+                      {visibleColumns.stake && (
+                        <div className="text-center min-w-[60px]">
+                          <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest mb-0.5">Apuesta</p>
+                          <p className="text-sm font-black text-white">{bet.stake}€</p>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-4 w-full lg:w-auto justify-between lg:justify-end">
+                      {visibleColumns.profit && (
+                        <div className="text-right min-w-[100px]">
+                            <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest mb-0.5">Beneficio</p>
+                            <p className={`text-xl font-black tracking-tighter ${bet.status === BetStatus.PENDING ? 'text-zinc-800' : (bet.profit > 0 ? 'text-emerald-400' : bet.profit < 0 ? 'text-[#e2001a]' : 'text-slate-400')}`}>
+                              {bet.status === BetStatus.PENDING ? '--' : `${bet.profit > 0 ? '+' : ''}${bet.profit.toFixed(2)}€`}
+                            </p>
+                        </div>
+                      )}
+
+                      {visibleColumns.actions && (
+                        <div className="flex items-center gap-1.5">
+                          {bet.status === BetStatus.PENDING ? (
+                            <>
+                              <button onClick={() => onUpdateStatus(bet.id, BetStatus.WON)} className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 hover:bg-emerald-500 hover:text-white transition-all"><i className="fas fa-check text-xs"></i></button>
+                              <button onClick={() => onUpdateStatus(bet.id, BetStatus.LOST)} className="w-8 h-8 rounded-lg bg-[#e2001a]/10 text-[#e2001a] border border-[#e2001a]/20 hover:bg-[#e2001a] hover:text-white transition-all"><i className="fas fa-times text-xs"></i></button>
+                            </>
+                          ) : (
+                              <div className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-[0.1em] shadow-sm ${getStatusStyle(bet.status)}`}>{formatStatusText(bet.status)}</div>
+                          )}
+                          <div className="flex flex-row gap-1 ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button onClick={() => onEdit(bet)} className="w-7 h-7 rounded-lg hover:bg-white/5 text-zinc-700 hover:text-blue-400 transition-all"><i className="fas fa-pencil text-[9px]"></i></button>
+                              <button onClick={() => setBetToDelete(bet.id)} className="w-7 h-7 rounded-lg hover:bg-white/5 text-zinc-700 hover:text-[#e2001a] transition-all"><i className="fas fa-trash text-[9px]"></i></button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
-              <div className="text-center">
-                <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Apuesta</p>
-                <p className="text-xl font-black text-white">{bet.stake}€</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-6 w-full lg:w-auto justify-between lg:justify-end">
-               <div className="text-right min-w-[120px]">
-                  <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Beneficio</p>
-                  <p className={`text-3xl font-black tracking-tighter ${bet.status === BetStatus.PENDING ? 'text-zinc-800' : (bet.profit > 0 ? 'text-emerald-400' : bet.profit < 0 ? 'text-[#e2001a]' : 'text-slate-400')}`}>
-                    {bet.status === BetStatus.PENDING ? '--' : `${bet.profit > 0 ? '+' : ''}${bet.profit.toFixed(2)}€`}
-                  </p>
-               </div>
-
-               <div className="flex items-center gap-2">
-                 {bet.status === BetStatus.PENDING ? (
-                   <>
-                     <button onClick={() => onUpdateStatus(bet.id, BetStatus.WON)} className="w-11 h-11 rounded-[1.2rem] bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 hover:bg-emerald-500 hover:text-white transition-all"><i className="fas fa-check"></i></button>
-                     <button onClick={() => onUpdateStatus(bet.id, BetStatus.LOST)} className="w-11 h-11 rounded-[1.2rem] bg-[#e2001a]/10 text-[#e2001a] border border-[#e2001a]/20 hover:bg-[#e2001a] hover:text-white transition-all"><i className="fas fa-times"></i></button>
-                   </>
-                 ) : (
-                    <div className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-[0.2em] shadow-sm ${getStatusStyle(bet.status)}`}>{formatStatusText(bet.status)}</div>
-                 )}
-                 <div className="flex flex-col gap-1 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => onEdit(bet)} className="w-8 h-8 rounded-lg hover:bg-white/5 text-zinc-700 hover:text-blue-400 transition-all"><i className="fas fa-pencil text-[10px]"></i></button>
-                    <button onClick={() => setBetToDelete(bet.id)} className="w-8 h-8 rounded-lg hover:bg-white/5 text-zinc-700 hover:text-[#e2001a] transition-all"><i className="fas fa-trash text-[10px]"></i></button>
-                 </div>
-               </div>
-            </div>
+            )}
           </div>
         )) : (
           <div className="glass-panel rounded-[3rem] p-24 text-center border-dashed border-2 border-white/5 flex flex-col items-center gap-6 opacity-40">

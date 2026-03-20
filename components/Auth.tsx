@@ -8,14 +8,33 @@ interface AuthProps {
 
 const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [isRegistering, setIsRegistering] = useState(false);
+  const [isRecovering, setIsRecovering] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   const handleAuth = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setSuccess('');
+
+    if (isRecovering) {
+      if (!email) {
+        setError('Por favor, introduce tu email.');
+        return;
+      }
+      const users = JSON.parse(localStorage.getItem('bt_users') || '[]');
+      const user = users.find((u: User & { password?: string }) => u.email === email);
+      if (user) {
+        setSuccess('Se ha enviado un enlace de recuperación a tu email (Simulado).');
+        // In a real app, we would call an API here.
+      } else {
+        setError('No se ha encontrado ninguna cuenta con ese email.');
+      }
+      return;
+    }
 
     if (!email || !password || (isRegistering && !name)) {
       setError('Por favor, rellena todos los campos.');
@@ -24,18 +43,19 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
     if (isRegistering) {
       const users = JSON.parse(localStorage.getItem('bt_users') || '[]');
-      if (users.find((u: any) => u.email === email)) {
+      if (users.find((u: User & { password?: string }) => u.email === email)) {
         setError('Este email ya está registrado.');
         return;
       }
-      const newUser = { id: Math.random().toString(36).substr(2, 9), email, name, plan: 'PRO' };
+      const newUser = { id: Math.random().toString(36).substr(2, 9), email, name, plan: 'PRO' as const };
       localStorage.setItem('bt_users', JSON.stringify([...users, { ...newUser, password }]));
       onLogin(newUser as User);
     } else {
       const users = JSON.parse(localStorage.getItem('bt_users') || '[]');
-      const user = users.find((u: any) => u.email === email && u.password === password);
+      const user = users.find((u: User & { password?: string }) => u.email === email && u.password === password);
       if (user) {
-        const { password, ...userWithoutPass } = user;
+        const userWithoutPass = { ...user };
+        delete (userWithoutPass as Partial<User & { password?: string }>).password;
         onLogin(userWithoutPass as User);
       } else {
         setError('Credenciales incorrectas.');
@@ -60,11 +80,11 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
         <div className="glass-panel rounded-[3rem] p-8 md:p-10 border-white/5 shadow-2xl">
           <h2 className="text-xl font-black text-white mb-8 uppercase italic tracking-tight">
-            {isRegistering ? 'Crear Nueva Cuenta' : 'Acceso Restringido'}
+            {isRecovering ? 'Recuperar Contraseña' : (isRegistering ? 'Crear Nueva Cuenta' : 'Acceso Restringido')}
           </h2>
 
           <form onSubmit={handleAuth} className="space-y-5">
-            {isRegistering && (
+            {isRegistering && !isRecovering && (
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Nombre Completo</label>
                 <input 
@@ -88,16 +108,29 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               />
             </div>
 
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Contraseña</label>
-              <input 
-                type="password"
-                className="w-full bg-zinc-900 border border-white/5 rounded-2xl px-5 py-4 text-white font-bold outline-none focus:border-[#e2001a] transition-all" 
-                placeholder="••••••••" 
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
+            {!isRecovering && (
+              <div className="space-y-2">
+                <div className="flex justify-between items-center ml-1">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Contraseña</label>
+                  {!isRegistering && (
+                    <button 
+                      type="button"
+                      onClick={() => { setIsRecovering(true); setError(''); setSuccess(''); }}
+                      className="text-[9px] font-black text-[#e2001a] uppercase tracking-widest hover:underline"
+                    >
+                      ¿Olvidaste tu contraseña?
+                    </button>
+                  )}
+                </div>
+                <input 
+                  type="password"
+                  className="w-full bg-zinc-900 border border-white/5 rounded-2xl px-5 py-4 text-white font-bold outline-none focus:border-[#e2001a] transition-all" 
+                  placeholder="••••••••" 
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </div>
+            )}
 
             {error && (
               <p className="text-[#e2001a] text-[10px] font-black uppercase text-center bg-red-500/10 py-3 rounded-xl border border-red-500/20">
@@ -105,21 +138,36 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               </p>
             )}
 
+            {success && (
+              <p className="text-emerald-500 text-[10px] font-black uppercase text-center bg-emerald-500/10 py-3 rounded-xl border border-emerald-500/20">
+                <i className="fas fa-check-circle mr-2"></i>{success}
+              </p>
+            )}
+
             <button 
               type="submit" 
               className="w-full py-5 bg-gradient-to-r from-[#e2001a] to-[#920011] rounded-2xl text-xs font-black text-white shadow-2xl shadow-red-900/40 hover:scale-[1.02] active:scale-[0.98] transition-all uppercase tracking-[0.2em] mt-4"
             >
-              {isRegistering ? 'Registrarme Ahora' : 'Entrar en el Sistema'}
+              {isRecovering ? 'Enviar Enlace' : (isRegistering ? 'Registrarme Ahora' : 'Entrar en el Sistema')}
             </button>
           </form>
 
-          <div className="mt-8 pt-8 border-t border-white/5 text-center">
-            <button 
-              onClick={() => { setIsRegistering(!isRegistering); setError(''); }}
-              className="text-slate-500 hover:text-white text-[11px] font-black uppercase tracking-widest transition-all"
-            >
-              {isRegistering ? '¿Ya tienes cuenta? Acceder' : '¿Eres nuevo? Crear Cuenta'}
-            </button>
+          <div className="mt-8 pt-8 border-t border-white/5 text-center space-y-4">
+            {isRecovering ? (
+              <button 
+                onClick={() => { setIsRecovering(false); setError(''); setSuccess(''); }}
+                className="text-slate-500 hover:text-white text-[11px] font-black uppercase tracking-widest transition-all"
+              >
+                Volver al Acceso
+              </button>
+            ) : (
+              <button 
+                onClick={() => { setIsRegistering(!isRegistering); setError(''); setSuccess(''); }}
+                className="text-slate-500 hover:text-white text-[11px] font-black uppercase tracking-widest transition-all"
+              >
+                {isRegistering ? '¿Ya tienes cuenta? Acceder' : '¿Eres nuevo? Crear Cuenta'}
+              </button>
+            )}
           </div>
         </div>
 

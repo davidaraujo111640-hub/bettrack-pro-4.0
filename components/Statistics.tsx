@@ -1,16 +1,25 @@
 
 import React, { useMemo } from 'react';
-import { Bet, BankrollStats, BetStatus } from '../types';
+import { Bet, BankrollStats, BetStatus, Bankroll } from '../types';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid, AreaChart, Area } from 'recharts';
 
 interface StatisticsProps {
   bets: Bet[];
   stats: BankrollStats;
+  bankrolls: Bankroll[];
+  activeBankrollId: string;
+  onSelectBankroll: (id: string) => void;
 }
 
 const COLORS = ['#10b981', '#e2001a', '#3b82f6', '#ffcc00', '#a855f7'];
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: { value: number; payload: { name: string; value: number; profit: number; cumulative: number; date?: string }; color?: string; name?: string; fill?: string }[];
+  label?: string;
+}
+
+const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
     return (
@@ -19,9 +28,9 @@ const CustomTooltip = ({ active, payload, label }: any) => {
           <p className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em]">{label}</p>
           {data.date && <p className="text-[9px] font-bold text-slate-600 italic">{data.date}</p>}
         </div>
-        {payload.map((item: any, index: number) => (
+        {payload.map((item, index) => (
           <div key={index} className="flex items-center gap-3">
-            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color || item.payload.fill || '#e2001a' }}></div>
+            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color || (item.payload as { fill?: string }).fill || '#e2001a' }}></div>
             <p className="text-xs font-black text-white uppercase tracking-tight">
               {item.name}: <span className={item.value >= 0 ? 'text-emerald-400' : 'text-[#e2001a]'}>
                 {typeof item.value === 'number' ? `${item.value.toFixed(2)}€` : item.value}
@@ -35,9 +44,9 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
-const Statistics: React.FC<StatisticsProps> = ({ bets, stats }) => {
+const Statistics: React.FC<StatisticsProps> = ({ bets, stats, bankrolls, activeBankrollId, onSelectBankroll }) => {
   const sportDistribution = useMemo(() => {
-    const dist = bets.reduce((acc: any[], bet) => {
+    const dist = bets.reduce((acc: { name: string; value: number; profit: number }[], bet) => {
       const existing = acc.find(a => a.name === bet.sport);
       if (existing) {
         existing.value += 1;
@@ -93,17 +102,59 @@ const Statistics: React.FC<StatisticsProps> = ({ bets, stats }) => {
     { name: 'Otras', value: bets.filter(b => b.status !== BetStatus.WON && b.status !== BetStatus.LOST && b.status !== BetStatus.PENDING).length },
   ].filter(s => s.value > 0);
 
+  const wonCount = bets.filter(b => b.status === BetStatus.WON).length;
+  const lostCount = bets.filter(b => b.status === BetStatus.LOST).length;
+  const totalClosed = statusDistribution.reduce((acc, s) => acc + s.value, 0);
+  const wonPercent = totalClosed > 0 ? (wonCount / totalClosed) * 100 : 0;
+  const lostPercent = totalClosed > 0 ? (lostCount / totalClosed) * 100 : 0;
+
   return (
     <div className="space-y-8 px-4 md:px-0 pb-20">
-      <header>
-        <span className="text-[#e2001a] font-bold text-xs uppercase tracking-[0.3em]">ANALYTICS</span>
-        <h2 className="text-4xl font-black tracking-tight text-white mt-2">Estadísticas</h2>
+      <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div>
+          <span className="text-[#e2001a] font-bold text-xs uppercase tracking-[0.3em]">ANALYTICS</span>
+          <h2 className="text-4xl font-black tracking-tight text-white mt-2">Estadísticas</h2>
+        </div>
+
+        {/* Bankroll Selector */}
+        <div className="flex flex-wrap gap-2">
+          <button 
+            onClick={() => onSelectBankroll('all')}
+            className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${
+              activeBankrollId === 'all' 
+              ? 'bg-[#e2001a] text-white border-[#e2001a] shadow-lg shadow-red-900/20' 
+              : 'bg-zinc-900 text-slate-400 border-white/5 hover:border-white/10'
+            }`}
+          >
+            Global
+          </button>
+          {bankrolls.filter(b => !b.archived).map(b => (
+            <button 
+              key={b.id}
+              onClick={() => onSelectBankroll(b.id)}
+              className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${
+                activeBankrollId === b.id 
+                ? 'bg-[#e2001a] text-white border-[#e2001a] shadow-lg shadow-red-900/20' 
+                : 'bg-zinc-900 text-slate-400 border-white/5 hover:border-white/10'
+              }`}
+            >
+              {b.name}
+            </button>
+          ))}
+        </div>
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="glass-panel p-8 rounded-[2.5rem] flex flex-col items-center border-white/5">
           <h3 className="text-lg font-black mb-6 w-full text-white uppercase italic">Éxito por Estados</h3>
-          <div className="h-64 w-full">
+          <div className="relative h-64 w-full flex items-center justify-center">
+            {/* Left: Won */}
+            <div className="absolute left-0 flex flex-col items-center z-10 pointer-events-none">
+              <span className="text-[8px] font-black text-emerald-500 uppercase tracking-widest opacity-60">Ganadas</span>
+              <span className="text-2xl font-black text-white leading-none">{wonCount}</span>
+              <span className="text-[10px] font-black text-emerald-400/80 mt-1">{wonPercent.toFixed(1)}%</span>
+            </div>
+
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie data={statusDistribution} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={10} dataKey="value" stroke="none">
@@ -113,6 +164,13 @@ const Statistics: React.FC<StatisticsProps> = ({ bets, stats }) => {
                 <Legend verticalAlign="bottom" height={36}/>
               </PieChart>
             </ResponsiveContainer>
+
+            {/* Right: Lost */}
+            <div className="absolute right-0 flex flex-col items-center z-10 pointer-events-none">
+              <span className="text-[8px] font-black text-[#e2001a] uppercase tracking-widest opacity-60">Perdidas</span>
+              <span className="text-2xl font-black text-white leading-none">{lostCount}</span>
+              <span className="text-[10px] font-black text-red-400/80 mt-1">{lostPercent.toFixed(1)}%</span>
+            </div>
           </div>
         </div>
 
@@ -191,7 +249,7 @@ const Statistics: React.FC<StatisticsProps> = ({ bets, stats }) => {
                   fill="url(#colorProfit)" 
                   baseValue={0}
                   animationDuration={2000}
-                  dot={(props: any) => {
+                  dot={(props: { cx: number; cy: number; payload: { cumulative: number }; index: number }) => {
                     const { cx, cy, payload, index } = props;
                     if (bankrollEvolution.length >= 50 || (payload.cumulative === 0 && index === 0)) return <span key={index} />;
                     return (

@@ -1,9 +1,10 @@
 
-import React, { useState, useEffect } from 'react';
-import { Bet, BetStatus, Sport, Bankroll } from '../types';
+import React, { useState } from 'react';
+import { Bet, BetStatus, Sport, Bankroll, Bookmaker } from '../types';
 
 interface AddBetModalProps {
   bankrolls: Bankroll[];
+  bookmakers: Bookmaker[];
   activeBankrollId: string;
   onClose: () => void;
   onSubmit: (bet: Omit<Bet, 'id' | 'profit'> & { manualProfit?: number }) => void;
@@ -26,22 +27,12 @@ const SPORTS: Sport[] = [
   'Otros'
 ];
 
-const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, activeBankrollId, onClose, onSubmit, initialData }) => {
-  const [formData, setFormData] = useState({
-    date: new Date().toISOString().split('T')[0],
-    bankrollId: activeBankrollId === 'all' ? (bankrolls.find(b => !b.archived)?.id || 'default') : activeBankrollId,
-    bookmaker: 'Winamax',
-    sport: 'Fútbol' as Sport,
-    odds: 1.80,
-    stake: 10,
-    status: BetStatus.PENDING,
-    description: '',
-    manualProfit: 0
-  });
+const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, activeBankrollId, onClose, onSubmit, initialData }) => {
+  const enabledBookmakers = bookmakers.filter(b => b.enabled);
 
-  useEffect(() => {
+  const [formData, setFormData] = useState(() => {
     if (initialData) {
-      setFormData({
+      return {
         date: initialData.date,
         bankrollId: initialData.bankrollId,
         bookmaker: initialData.bookmaker,
@@ -51,9 +42,20 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, activeBankrollId, 
         status: initialData.status,
         description: initialData.description,
         manualProfit: initialData.profit || 0
-      });
+      };
     }
-  }, [initialData]);
+    return {
+      date: new Date().toISOString().split('T')[0],
+      bankrollId: activeBankrollId === 'all' ? (bankrolls.find(b => !b.archived)?.id || 'default') : activeBankrollId,
+      bookmaker: enabledBookmakers.length > 0 ? enabledBookmakers[0].name : 'Otros',
+      sport: 'Fútbol' as Sport,
+      odds: 1.80,
+      stake: 10,
+      status: BetStatus.PENDING,
+      description: '',
+      manualProfit: 0
+    };
+  });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,15 +79,35 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, activeBankrollId, 
         </div>
 
         <form onSubmit={handleSubmit} className="p-8 space-y-6 max-h-[75vh] overflow-y-auto">
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Bankroll Destino</label>
+            <select 
+              className="w-full bg-zinc-900 border border-white/10 rounded-2xl px-4 py-4 text-sm font-bold text-white outline-none focus:border-[#e2001a]" 
+              value={formData.bankrollId} 
+              onChange={(e) => setFormData({...formData, bankrollId: e.target.value})}
+            >
+              {bankrolls.filter(b => !b.archived || b.id === formData.bankrollId).map(b => (
+                <option key={b.id} value={b.id}>{b.name}{b.archived ? ' (Archivado)' : ''}</option>
+              ))}
+            </select>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Casa de Apuestas</label>
-              <input 
-                className="w-full bg-zinc-900 border border-white/10 rounded-2xl px-5 py-4 text-sm font-bold text-white outline-none focus:border-[#ffcc00]" 
-                placeholder="Ej: Winamax, Bet365..." 
-                value={formData.bookmaker} 
-                onChange={(e) => setFormData({...formData, bookmaker: e.target.value})} 
-              />
+              <select 
+                className="w-full bg-zinc-900 border border-white/10 rounded-2xl px-4 py-4 text-sm font-bold text-white outline-none focus:border-[#e2001a]" 
+                value={enabledBookmakers.some(b => b.name === formData.bookmaker) ? formData.bookmaker : 'Otros'} 
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFormData({...formData, bookmaker: val === 'Otros' ? '' : val});
+                }}
+              >
+                {enabledBookmakers.map(b => (
+                  <option key={b.id} value={b.name}>{b.name}</option>
+                ))}
+                <option value="Otros">Otros (Manual)</option>
+              </select>
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Mercado / Deporte</label>
@@ -94,6 +116,18 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, activeBankrollId, 
               </select>
             </div>
           </div>
+
+          {(!enabledBookmakers.some(b => b.name === formData.bookmaker) || formData.bookmaker === '') && (
+            <div className="space-y-2 animate-in slide-in-from-top-2 duration-300">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Nombre de la Casa (Manual)</label>
+              <input 
+                className="w-full bg-zinc-900 border border-white/10 rounded-2xl px-5 py-4 text-sm font-bold text-white outline-none focus:border-[#e2001a]" 
+                placeholder="Introduce el nombre de la casa" 
+                value={formData.bookmaker} 
+                onChange={(e) => setFormData({...formData, bookmaker: e.target.value})} 
+              />
+            </div>
+          )}
 
           <div className="space-y-2">
             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Descripción del Pronóstico</label>

@@ -47,6 +47,13 @@ export interface Bet {
   description: string;
 }
 
+export interface Bookmaker {
+  id: string;
+  name: string;
+  icon: string;
+  enabled: boolean;
+}
+
 export interface BankrollStats {
   totalProfit: number;
   roi: number;

@@ -7,9 +7,13 @@ import Statistics from './components/Statistics';
 import AddBetModal from './components/AddBetModal';
 import AIInsights from './components/AIInsights';
 import BankrollManager from './components/BankrollManager';
+import BookmakerManager from './components/BookmakerManager';
 import Auth from './components/Auth';
 import Toast from './components/Toast';
-import { Bet, BetStatus, BankrollStats, Bankroll, User } from './types';
+import ConfirmModal from './components/ConfirmModal';
+import ProfileModal from './components/ProfileModal';
+import { Bet, BetStatus, BankrollStats, Bankroll, User, Bookmaker } from './types';
+import { getBookmakerIcon } from './src/utils/bookmakers';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(() => {
@@ -20,6 +24,82 @@ const App: React.FC = () => {
   const [bankrolls, setBankrolls] = useState<Bankroll[]>(() => {
     const saved = localStorage.getItem('bt_bankrolls');
     return saved ? JSON.parse(saved) : [{ id: 'default', name: 'Bankroll Principal', initialCapital: 1000, color: '#e2001a' }];
+  });
+
+  const [bookmakers, setBookmakers] = useState<Bookmaker[]>(() => {
+    const saved = localStorage.getItem('bt_bookmakers');
+    const defaultBookmakers: Bookmaker[] = [
+      { id: '888sport', name: '888sport', icon: getBookmakerIcon('888sport'), enabled: true },
+      { id: 'admiralbet', name: 'AdmiralBet', icon: getBookmakerIcon('AdmiralBet'), enabled: true },
+      { id: 'bet365', name: 'Bet365', icon: getBookmakerIcon('Bet365'), enabled: true },
+      { id: 'betfair', name: 'Betfair', icon: getBookmakerIcon('Betfair'), enabled: true },
+      { id: 'betsson', name: 'Betsson', icon: getBookmakerIcon('Betsson'), enabled: true },
+      { id: 'betway', name: 'Betway', icon: getBookmakerIcon('Betway'), enabled: true },
+      { id: 'bet777', name: 'Bet777', icon: getBookmakerIcon('Bet777'), enabled: true },
+      { id: 'bwin', name: 'Bwin', icon: getBookmakerIcon('Bwin'), enabled: true },
+      { id: 'casinobarcelona', name: 'Casino Barcelona', icon: getBookmakerIcon('Casino Barcelona'), enabled: true },
+      { id: 'casinogranmadrid', name: 'Casino Gran Madrid', icon: getBookmakerIcon('Casino Gran Madrid'), enabled: true },
+      { id: 'codere', name: 'Codere', icon: getBookmakerIcon('Codere'), enabled: true },
+      { id: 'ebingo', name: 'Ebingo', icon: getBookmakerIcon('Ebingo'), enabled: true },
+      { id: 'efbet', name: 'Efbet', icon: getBookmakerIcon('Efbet'), enabled: true },
+      { id: 'enracha', name: 'Enracha', icon: getBookmakerIcon('Enracha'), enabled: true },
+      { id: 'goldenpark', name: 'GoldenPark', icon: getBookmakerIcon('GoldenPark'), enabled: true },
+      { id: 'interwetten', name: 'Interwetten', icon: getBookmakerIcon('Interwetten'), enabled: true },
+      { id: 'jokerbet', name: 'Jokerbet', icon: getBookmakerIcon('Jokerbet'), enabled: true },
+      { id: 'kirolbet', name: 'Kirolbet', icon: getBookmakerIcon('Kirolbet'), enabled: true },
+      { id: 'leovegas', name: 'LeoVegas', icon: getBookmakerIcon('LeoVegas'), enabled: true },
+      { id: 'luckia', name: 'Luckia', icon: getBookmakerIcon('Luckia'), enabled: true },
+      { id: 'marathonbet', name: 'Marathonbet', icon: getBookmakerIcon('Marathonbet'), enabled: true },
+      { id: 'marcaapuestas', name: 'Marca Apuestas', icon: getBookmakerIcon('Marca Apuestas'), enabled: true },
+      { id: 'olybet', name: 'OlyBet', icon: getBookmakerIcon('OlyBet'), enabled: true },
+      { id: 'paf', name: 'Paf', icon: getBookmakerIcon('Paf'), enabled: true },
+      { id: 'paston', name: 'Pastón', icon: getBookmakerIcon('Pastón'), enabled: true },
+      { id: 'pokerstars', name: 'PokerStars Sports', icon: getBookmakerIcon('PokerStars Sports'), enabled: true },
+      { id: 'retabet', name: 'Retabet', icon: getBookmakerIcon('Retabet'), enabled: true },
+      { id: 'sportium', name: 'Sportium', icon: getBookmakerIcon('Sportium'), enabled: true },
+      { id: 'tonybet', name: 'TonyBet', icon: getBookmakerIcon('TonyBet'), enabled: true },
+      { id: 'versus', name: 'Versus', icon: getBookmakerIcon('Versus'), enabled: true },
+      { id: 'wanabet', name: 'Wanabet', icon: getBookmakerIcon('Wanabet'), enabled: true },
+      { id: 'williamhill', name: 'William Hill', icon: getBookmakerIcon('William Hill'), enabled: true },
+      { id: 'winamax', name: 'Winamax', icon: getBookmakerIcon('Winamax'), enabled: true },
+    ].sort((a, b) => a.name.localeCompare(b.name));
+
+    if (saved) {
+      const savedList: Bookmaker[] = JSON.parse(saved);
+      const savedIds = new Set(savedList.map((b: Bookmaker) => b.id));
+      const savedNames = new Set(savedList.map((b: Bookmaker) => b.name.toLowerCase()));
+      
+      const missing = defaultBookmakers.filter(b => 
+        !savedIds.has(b.id) && !savedNames.has(b.name.toLowerCase())
+      );
+      
+      // Also ensure savedList itself doesn't have duplicates by name (in case they were added manually)
+      const uniqueSaved: Bookmaker[] = [];
+      const seenNames = new Set<string>();
+      
+      savedList.forEach(b => {
+        if (!seenNames.has(b.name.toLowerCase())) {
+          const isCustomIcon = b.icon.startsWith('data:image');
+          let updatedBookmaker = b;
+          
+          // Only attempt to update if it's NOT a custom user upload
+          if (!isCustomIcon) {
+            const officialIcon = getBookmakerIcon(b.name);
+            // Update if the saved icon is different from the current official default (e.g. old clearbit URL)
+            if (b.icon !== officialIcon) {
+              updatedBookmaker = { ...b, icon: officialIcon };
+            }
+          }
+          
+          uniqueSaved.push(updatedBookmaker);
+          seenNames.add(b.name.toLowerCase());
+        }
+      });
+
+      return [...uniqueSaved, ...missing].sort((a, b) => a.name.localeCompare(b.name));
+    }
+    
+    return defaultBookmakers;
   });
 
   const [activeBankrollId, setActiveBankrollId] = useState<string>('all');
@@ -33,6 +113,10 @@ const App: React.FC = () => {
   const [editingBet, setEditingBet] = useState<Bet | null>(null);
   const [lastSaved, setLastSaved] = useState<string>(new Date().toLocaleTimeString());
   const [toast, setToast] = useState<{message: string, type: 'success' | 'error' | 'info'} | null>(null);
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+
+  const updateLastSaved = () => setLastSaved(new Date().toLocaleTimeString());
 
   useEffect(() => {
     if (user) {
@@ -44,12 +128,14 @@ const App: React.FC = () => {
 
   useEffect(() => {
     localStorage.setItem('bt_bankrolls', JSON.stringify(bankrolls));
-    setLastSaved(new Date().toLocaleTimeString());
   }, [bankrolls]);
 
   useEffect(() => {
+    localStorage.setItem('bt_bookmakers', JSON.stringify(bookmakers));
+  }, [bookmakers]);
+
+  useEffect(() => {
     localStorage.setItem('bet_track_bets', JSON.stringify(bets));
-    setLastSaved(new Date().toLocaleTimeString());
   }, [bets]);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
@@ -107,6 +193,7 @@ const App: React.FC = () => {
       showToast('Nueva apuesta registrada');
     }
     setIsAddModalOpen(false);
+    updateLastSaved();
   };
 
   const handleUpdateStatus = (id: string, newStatus: BetStatus, manualProfit?: number) => {
@@ -122,16 +209,16 @@ const App: React.FC = () => {
       return bet;
     }));
 
-    let statusLabel = '';
+    let statusLabel: string = newStatus;
     switch(newStatus) {
       case BetStatus.WON: statusLabel = 'Ganada'; break;
       case BetStatus.LOST: statusLabel = 'Perdida'; break;
       case BetStatus.CASH_OUT: statusLabel = 'Cash Out'; break;
       case BetStatus.REFUNDED: statusLabel = 'Reembolsada'; break;
       case BetStatus.CANCELLED: statusLabel = 'Anulada'; break;
-      default: statusLabel = newStatus;
     }
     showToast(`Estado cambiado a ${statusLabel}`, 'info');
+    updateLastSaved();
   };
 
   const handleEdit = (bet: Bet) => {
@@ -142,13 +229,17 @@ const App: React.FC = () => {
   const handleDeleteBet = (id: string) => {
     setBets(bets.filter(b => b.id !== id));
     showToast('Operación eliminada', 'error');
+    updateLastSaved();
   };
 
   const handleLogout = () => {
-    if (window.confirm('¿Deseas cerrar la sesión de seguridad?')) {
-      setUser(null);
-      showToast('Sesión cerrada correctamente', 'info');
-    }
+    setIsLogoutConfirmOpen(true);
+  };
+
+  const confirmLogout = () => {
+    setUser(null);
+    setIsLogoutConfirmOpen(false);
+    showToast('Sesión cerrada correctamente', 'info');
   };
 
   useEffect(() => {
@@ -200,15 +291,18 @@ const App: React.FC = () => {
           </div>
 
           <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
-             <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-[#e2001a] border border-white/5">
+             <button 
+                onClick={() => setIsProfileModalOpen(true)}
+                className="w-full flex items-center gap-3 hover:bg-white/5 p-2 rounded-xl transition-all group"
+             >
+                <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-[#e2001a] border border-white/5 group-hover:bg-[#e2001a] group-hover:text-white transition-all">
                     <i className="fas fa-user-shield"></i>
                 </div>
-                <div className="min-w-0">
+                <div className="min-w-0 text-left">
                     <p className="text-xs font-black text-white truncate">{user.name}</p>
                     <span className="text-[8px] font-black text-[#ffcc00] uppercase tracking-widest">{user.plan} MEMBER</span>
                 </div>
-             </div>
+             </button>
              <button onClick={handleLogout} className="w-full mt-3 py-2 text-[9px] font-black text-zinc-500 hover:text-[#e2001a] uppercase tracking-widest transition-all">
                 Cerrar Sesión <i className="fas fa-sign-out-alt ml-1"></i>
              </button>
@@ -220,6 +314,7 @@ const App: React.FC = () => {
             <NavLink to="/statistics" icon="fas fa-chart-pie" label="Estadísticas" />
             <NavLink to="/bankrolls" icon="fas fa-wallet" label="Bankrolls" />
             <NavLink to="/ai-insights" icon="fas fa-bolt" label="Analista AI" />
+            <NavLink to="/bookmakers" icon="fas fa-building-columns" label="Casas" />
           </div>
 
           <div className="mt-auto space-y-4">
@@ -315,6 +410,13 @@ const App: React.FC = () => {
             </button>
             <MobileNavLink to="/statistics" icon="fas fa-chart-pie" />
             <MobileNavLink to="/bankrolls" icon="fas fa-wallet" />
+            <MobileNavLink to="/bookmakers" icon="fas fa-building-columns" />
+            <button 
+                onClick={() => setIsProfileModalOpen(true)}
+                className="w-12 h-12 flex items-center justify-center rounded-2xl transition-all text-slate-500 hover:text-[#e2001a]"
+            >
+                <i className="fas fa-user-shield text-xl"></i>
+            </button>
         </nav>
 
         <main className="flex-1 overflow-y-auto pb-24 md:pb-0 px-4 pt-6 md:p-0">
@@ -322,16 +424,20 @@ const App: React.FC = () => {
             <Routes>
               <Route path="/" element={<Dashboard stats={stats} bets={filteredBets} />} />
               <Route path="/bets" element={<BetList bets={filteredBets} activeBankrollName={activeBankrollName} onDelete={handleDeleteBet} onUpdateStatus={handleUpdateStatus} onEdit={handleEdit} />} />
-              <Route path="/statistics" element={<Statistics bets={filteredBets} stats={stats} />} />
+              <Route path="/statistics" element={<Statistics bets={filteredBets} stats={stats} bankrolls={bankrolls} activeBankrollId={activeBankrollId} onSelectBankroll={handleSetActiveBankroll} />} />
               <Route path="/ai-insights" element={<AIInsights bets={filteredBets} />} />
               <Route path="/bankrolls" element={<BankrollManager bankrolls={bankrolls} bets={bets} onUpdate={setBankrolls} activeBankrollId={activeBankrollId} onSelect={handleSetActiveBankroll} />} />
+              <Route path="/bookmakers" element={<BookmakerManager bookmakers={bookmakers} onUpdate={setBookmakers} />} />
+              <Route path="/auth" element={<Auth onLogin={setUser} />} />
             </Routes>
           </div>
         </main>
 
         {isAddModalOpen && (
           <AddBetModal 
+            key={editingBet?.id || 'new'}
             bankrolls={bankrolls}
+            bookmakers={bookmakers}
             activeBankrollId={activeBankrollId}
             onClose={() => { setIsAddModalOpen(false); setEditingBet(null); }} 
             onSubmit={handleAddBet}
@@ -344,6 +450,26 @@ const App: React.FC = () => {
             message={toast.message} 
             type={toast.type} 
             onClose={() => setToast(null)} 
+          />
+        )}
+
+        <ConfirmModal 
+          isOpen={isLogoutConfirmOpen}
+          title="Cerrar Sesión"
+          message="¿Estás seguro de que deseas cerrar la sesión de seguridad? Deberás volver a autenticarte para acceder a tus datos."
+          onConfirm={confirmLogout}
+          onCancel={() => setIsLogoutConfirmOpen(false)}
+          confirmText="Cerrar Sesión"
+          type="danger"
+        />
+
+        {isProfileModalOpen && (
+          <ProfileModal 
+            isOpen={isProfileModalOpen}
+            user={user}
+            onClose={() => setIsProfileModalOpen(false)}
+            onUpdate={setUser}
+            showToast={showToast}
           />
         )}
       </div>

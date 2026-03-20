@@ -1,11 +1,21 @@
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 
 interface WinnerCelebrationProps {
   onClose: () => void;
 }
 
 const WinnerCelebration: React.FC<WinnerCelebrationProps> = ({ onClose }) => {
+  const [confetti] = useState(() => [...Array(60)].map((_, i) => ({
+    id: i,
+    left: `${Math.random() * 100}%`,
+    width: `${Math.random() * 15 + 8}px`,
+    height: `${Math.random() * 15 + 8}px`,
+    backgroundColor: ['#e2001a', '#ffcc00', '#10b981', '#3b82f6', '#ffffff'][Math.floor(Math.random() * 5)],
+    animationDelay: `${Math.random() * 2}s`,
+    animationDuration: `${Math.random() * 1.5 + 1}s`,
+  })));
+
   useEffect(() => {
     // Auto-cierre más rápido para mantener la agilidad de la app
     const timer = setTimeout(onClose, 3500);
@@ -19,18 +29,18 @@ const WinnerCelebration: React.FC<WinnerCelebrationProps> = ({ onClose }) => {
       
       {/* Lluvia de Confeti Masiva (CSS puro) */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {[...Array(60)].map((_, i) => (
+        {confetti.map((c) => (
           <div 
-            key={i} 
+            key={c.id} 
             className="absolute rounded-full animate-confetti-fast"
             style={{
-              left: `${Math.random() * 100}%`,
+              left: c.left,
               top: `-5%`,
-              width: `${Math.random() * 15 + 8}px`,
-              height: `${Math.random() * 15 + 8}px`,
-              backgroundColor: ['#e2001a', '#ffcc00', '#10b981', '#3b82f6', '#ffffff'][Math.floor(Math.random() * 5)],
-              animationDelay: `${Math.random() * 2}s`,
-              animationDuration: `${Math.random() * 1.5 + 1}s`,
+              width: c.width,
+              height: c.height,
+              backgroundColor: c.backgroundColor,
+              animationDelay: c.animationDelay,
+              animationDuration: c.animationDuration,
               boxShadow: '0 0 10px rgba(255,255,255,0.3)'
             }}
           ></div>

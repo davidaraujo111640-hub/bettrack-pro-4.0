@@ -2,13 +2,20 @@
 import React, { useMemo } from 'react';
 import { BankrollStats, Bet, BetStatus } from '../types';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine } from 'recharts';
+import { getSportIcon } from '../src/utils/icons';
 
 interface DashboardProps {
   stats: BankrollStats;
   bets: Bet[];
 }
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: { value: number; payload: { date: string; cumulative: number }; color?: string }[];
+  label?: string;
+}
+
+const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
   if (active && payload && payload.length) {
     const val = payload[0].value;
     return (
@@ -35,7 +42,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, bets }) => {
       .filter(b => b.status !== BetStatus.PENDING)
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-    const data: { date: string; cumulativeProfit: number }[] = [{ date: 'Start', cumulativeProfit: 0 }];
+    const data: { date: string; cumulativeProfit: number }[] = [{ date: 'Inicio', cumulativeProfit: 0 }];
     let currentSum = 0;
     closedBets.forEach(bet => {
       currentSum += bet.profit;
@@ -167,9 +174,9 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, bets }) => {
                         <span className="text-slate-500 font-black uppercase tracking-widest text-[9px]">Especialidad</span>
                         <h4 className="text-white font-black text-xl mt-1">{topPerformance ? topPerformance.name : 'Pendiente'}</h4>
                     </div>
-                    <div className="bg-[#ffcc00] text-black w-10 h-10 rounded-xl flex items-center justify-center text-lg">
-                    {getSportIcon(topPerformance?.name || 'Otros')}
-                </div>
+                    <div className="bg-zinc-950 text-white w-16 h-16 rounded-2xl flex items-center justify-center text-4xl border border-white/10 shadow-2xl">
+                        {getSportIcon(topPerformance?.name || 'Otros')}
+                    </div>
              </div>
              <div className="mt-4 pt-4 border-t border-white/5">
                     <p className="text-[10px] font-bold text-slate-400">Has generado <span className="text-emerald-400 font-black">+{topPerformance?.profit?.toFixed(1) ?? '0.0'}€</span> solo en este deporte. ¡Sigue así!</p>
@@ -268,7 +275,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, bets }) => {
                             </div>
                             <div className="flex-1 overflow-hidden">
                                 <p className="text-white font-bold text-xs truncate">{bet.description}</p>
-                                <p className="text-[9px] font-black text-zinc-600 uppercase">{bet.odds.toFixed(2)} • {bet.stake}€</p>
+                                <p className="text-[9px] font-black text-zinc-600 uppercase">{bet.odds.toFixed(2)} • {bet.stake}€ • {bet.bookmaker}</p>
                             </div>
                         </div>
                     )) : (
@@ -298,37 +305,6 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, bets }) => {
       </div>
     </div>
   );
-};
-
-export const getSportIcon = (sport: string): React.ReactNode => {
-  const containerClass = "flex items-center justify-center w-full h-full transition-transform duration-300 group-hover:scale-110";
-  
-  switch (sport) {
-    case 'Fútbol': return <div className={containerClass}><i className="fas fa-futbol"></i></div>;
-    case 'Baloncesto': return <div className={containerClass}><i className="fas fa-basketball"></i></div>;
-    case 'Tenis': return (
-      <div className={`${containerClass} relative`}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="w-[1.1em] h-[1.1em]">
-          <circle cx="9" cy="9" r="7" />
-          <path d="M14 14l7 7" />
-          <path d="M12 12l3 3" />
-          <path d="M9 2v14M2 9h14" />
-          <path d="M5.5 5.5l7 7M5.5 12.5l7-7" />
-        </svg>
-        <div className="absolute top-0 right-0 w-2.5 h-2.5 bg-[#ffcc00] rounded-full border border-black/40 shadow-sm"></div>
-      </div>
-    );
-    case 'eSports': return <div className={containerClass}><i className="fas fa-gamepad"></i></div>;
-    case 'MMA': return <div className={containerClass}><i className="fas fa-hand-fist"></i></div>;
-    case 'NFL': return <div className={containerClass}><i className="fas fa-football"></i></div>;
-    case 'Béisbol': return <div className={containerClass}><i className="fas fa-baseball"></i></div>;
-    case 'Ciclismo': return <div className={containerClass}><i className="fas fa-bicycle"></i></div>;
-    case 'F1': return <div className={containerClass}><i className="fas fa-flag-checkered"></i></div>;
-    case 'MotoGP': return <div className={containerClass}><i className="fas fa-motorcycle"></i></div>;
-    case 'Boxeo': return <div className={containerClass}><i className="fas fa-hand-fist"></i></div>;
-    case 'Caballos': return <div className={containerClass}><i className="fas fa-horse"></i></div>;
-    default: return <div className={containerClass}><i className="fas fa-trophy"></i></div>;
-  }
 };
 
 export default Dashboard;
