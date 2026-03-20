@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { HashRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import Dashboard from './components/Dashboard';
 import BetList from './components/BetList';
@@ -116,7 +116,7 @@ const App: React.FC = () => {
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
-  const updateLastSaved = () => setLastSaved(new Date().toLocaleTimeString());
+  const updateLastSaved = useCallback(() => setLastSaved(new Date().toLocaleTimeString()), []);
 
   useEffect(() => {
     if (user) {
@@ -138,9 +138,9 @@ const App: React.FC = () => {
     localStorage.setItem('bet_track_bets', JSON.stringify(bets));
   }, [bets]);
 
-  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToast({ message, type });
-  };
+  }, []);
 
   const filteredBets = useMemo(() => {
     if (activeBankrollId === 'all') {
@@ -172,32 +172,38 @@ const App: React.FC = () => {
     };
   }, [filteredBets, activeBankrollId, bankrolls]);
 
-  const handleAddBet = (newBet: Omit<Bet, 'id' | 'profit'> & { manualProfit?: number }) => {
+  const handleAddBet = useCallback((newBet: Omit<Bet, 'id' | 'profit'> & { manualProfit?: number }) => {
     let profit = 0;
     if (newBet.status === BetStatus.WON) profit = (newBet.odds * newBet.stake) - newBet.stake;
     else if (newBet.status === BetStatus.LOST) profit = -newBet.stake;
     else if (newBet.status === BetStatus.CASH_OUT) profit = newBet.manualProfit || 0;
     else if (newBet.status === BetStatus.REFUNDED || newBet.status === BetStatus.CANCELLED) profit = 0;
 
+    setBets(prevBets => {
+      if (editingBet) {
+        return prevBets.map(b => b.id === editingBet.id ? { ...newBet, id: editingBet.id, profit } : b);
+      } else {
+        const betWithId: Bet = {
+          ...newBet,
+          id: Math.random().toString(36).substr(2, 9),
+          profit
+        };
+        return [betWithId, ...prevBets];
+      }
+    });
+
     if (editingBet) {
-      setBets(bets.map(b => b.id === editingBet.id ? { ...newBet, id: editingBet.id, profit } : b));
       showToast('Operación actualizada');
       setEditingBet(null);
     } else {
-      const betWithId: Bet = {
-        ...newBet,
-        id: Math.random().toString(36).substr(2, 9),
-        profit
-      };
-      setBets([betWithId, ...bets]);
       showToast('Nueva apuesta registrada');
     }
     setIsAddModalOpen(false);
     updateLastSaved();
-  };
+  }, [editingBet, showToast, updateLastSaved]);
 
-  const handleUpdateStatus = (id: string, newStatus: BetStatus, manualProfit?: number) => {
-    setBets(bets.map(bet => {
+  const handleUpdateStatus = useCallback((id: string, newStatus: BetStatus, manualProfit?: number) => {
+    setBets(prevBets => prevBets.map(bet => {
       if (bet.id === id) {
         let profit = 0;
         if (newStatus === BetStatus.WON) profit = (bet.odds * bet.stake) - bet.stake;
@@ -219,28 +225,28 @@ const App: React.FC = () => {
     }
     showToast(`Estado cambiado a ${statusLabel}`, 'info');
     updateLastSaved();
-  };
+  }, [showToast, updateLastSaved]);
 
-  const handleEdit = (bet: Bet) => {
+  const handleEdit = useCallback((bet: Bet) => {
     setEditingBet(bet);
     setIsAddModalOpen(true);
-  };
+  }, []);
 
-  const handleDeleteBet = (id: string) => {
-    setBets(bets.filter(b => b.id !== id));
+  const handleDeleteBet = useCallback((id: string) => {
+    setBets(prevBets => prevBets.filter(b => b.id !== id));
     showToast('Operación eliminada', 'error');
     updateLastSaved();
-  };
+  }, [showToast, updateLastSaved]);
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     setIsLogoutConfirmOpen(true);
-  };
+  }, []);
 
-  const confirmLogout = () => {
+  const confirmLogout = useCallback(() => {
     setUser(null);
     setIsLogoutConfirmOpen(false);
     showToast('Sesión cerrada correctamente', 'info');
-  };
+  }, [showToast]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -255,16 +261,19 @@ const App: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isBankrollDropdownOpen]);
 
-  const handleLogin = (u: User) => {
+  const handleLogin = useCallback((u: User) => {
     setUser(u);
     showToast(`Bienvenido, ${u.name}`);
-  };
+  }, [showToast]);
 
-  const handleSetActiveBankroll = (id: string) => {
+  const handleSetActiveBankroll = useCallback((id: string) => {
     setActiveBankrollId(id);
-    const bankName = id === 'all' ? 'Global' : bankrolls.find(b => b.id === id)?.name;
-    showToast(`Cambiado a ${bankName}`, 'info');
-  };
+    setBankrolls(prev => {
+      const bankName = id === 'all' ? 'Global' : prev.find(b => b.id === id)?.name;
+      showToast(`Cambiado a ${bankName}`, 'info');
+      return prev;
+    });
+  }, [showToast]);
 
   const activeBankrollName = useMemo(() => {
     if (activeBankrollId === 'all') return 'Global';
@@ -394,28 +403,32 @@ const App: React.FC = () => {
         </nav>
 
         {/* Navegación móvil */}
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 glass-panel border-t border-white/10 px-4 py-3 flex items-center justify-around rounded-t-[2rem]">
-            <MobileNavLink to="/" icon="fas fa-house" />
-            <MobileNavLink to="/bets" icon="fas fa-list-check" />
-            <button 
-                disabled={activeBankrollId === 'all'}
-                onClick={() => { setEditingBet(null); setIsAddModalOpen(true); }}
-                className={`w-14 h-14 rounded-full flex items-center justify-center -mt-10 border-4 border-[#050505] transition-all ${
-                    activeBankrollId === 'all'
-                    ? 'bg-zinc-800 text-slate-600 cursor-not-allowed'
-                    : 'bg-[#e2001a] text-white shadow-xl shadow-red-900/40 active:scale-90'
-                }`}
-            >
-                <i className={`fas ${activeBankrollId === 'all' ? 'fa-lock' : 'fa-plus'} text-xl`}></i>
-            </button>
-            <MobileNavLink to="/statistics" icon="fas fa-chart-pie" />
-            <MobileNavLink to="/bankrolls" icon="fas fa-wallet" />
-            <MobileNavLink to="/bookmakers" icon="fas fa-building-columns" />
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 glass-panel border-t border-white/10 px-2 py-3 flex items-center justify-between rounded-t-[2rem] safe-area-pb">
+            <MobileNavLink to="/" icon="fas fa-house" label="Inicio" />
+            <MobileNavLink to="/bets" icon="fas fa-list-check" label="Apuestas" />
+            
+            <div className="relative -mt-12">
+                <button 
+                    disabled={activeBankrollId === 'all'}
+                    onClick={() => { setEditingBet(null); setIsAddModalOpen(true); }}
+                    className={`w-14 h-14 rounded-full flex items-center justify-center border-4 border-[#050505] transition-all ${
+                        activeBankrollId === 'all'
+                        ? 'bg-zinc-800 text-slate-600 cursor-not-allowed'
+                        : 'bg-[#e2001a] text-white shadow-xl shadow-red-900/40 active:scale-90'
+                    }`}
+                >
+                    <i className={`fas ${activeBankrollId === 'all' ? 'fa-lock' : 'fa-plus'} text-xl`}></i>
+                </button>
+            </div>
+
+            <MobileNavLink to="/statistics" icon="fas fa-chart-pie" label="Stats" />
+            
             <button 
                 onClick={() => setIsProfileModalOpen(true)}
-                className="w-12 h-12 flex items-center justify-center rounded-2xl transition-all text-slate-500 hover:text-[#e2001a]"
+                className="flex flex-col items-center justify-center gap-1 w-12 transition-all text-slate-500 hover:text-[#e2001a]"
             >
-                <i className="fas fa-user-shield text-xl"></i>
+                <i className="fas fa-user-shield text-lg"></i>
+                <span className="text-[8px] font-black uppercase tracking-tighter">Perfil</span>
             </button>
         </nav>
 
@@ -488,12 +501,13 @@ const NavLink: React.FC<{ to: string, icon: string, label: string }> = ({ to, ic
   );
 };
 
-const MobileNavLink: React.FC<{ to: string, icon: string }> = ({ to, icon }) => {
+const MobileNavLink: React.FC<{ to: string, icon: string, label: string }> = ({ to, icon, label }) => {
     const location = useLocation();
     const isActive = location.pathname === to;
     return (
-        <Link to={to} className={`w-12 h-12 flex items-center justify-center rounded-2xl transition-all ${isActive ? 'text-[#e2001a] bg-[#e2001a]/10' : 'text-slate-500'}`}>
-            <i className={`${icon} text-xl`}></i>
+        <Link to={to} className={`flex flex-col items-center justify-center gap-1 w-12 transition-all ${isActive ? 'text-[#e2001a]' : 'text-slate-500'}`}>
+            <i className={`${icon} text-lg`}></i>
+            <span className="text-[8px] font-black uppercase tracking-tighter">{label}</span>
         </Link>
     );
 };

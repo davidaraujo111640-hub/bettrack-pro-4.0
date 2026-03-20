@@ -33,6 +33,26 @@
         .animate-slide-up {
             animation: slideInUp 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
         }
+
+        /* Mobile safe area utilities */
+        .safe-area-pb {
+            padding-bottom: env(safe-area-inset-bottom, 12px);
+        }
+        
+        @media (max-width: 640px) {
+            .glass-panel {
+                backdrop-filter: blur(10px); /* Reduce blur on mobile for performance */
+            }
+            h2 {
+                letter-spacing: -0.02em;
+            }
+        }
+
+        /* Smooth scrolling for mobile */
+        html {
+            scroll-behavior: smooth;
+            -webkit-tap-highlight-color: transparent;
+        }
     </style>
 <script type="importmap">
 {

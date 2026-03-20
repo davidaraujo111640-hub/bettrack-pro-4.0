@@ -1,5 +1,4 @@
-
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Bet, BetStatus } from '../types';
 import { getSportIcon } from '../src/utils/icons';
 import { getBookmakerBrand } from '../src/utils/bookmakers';
@@ -25,6 +24,169 @@ const formatStatusText = (status: BetStatus): string => {
   }
 };
 
+const getStatusStyle = (status: BetStatus) => {
+  switch (status) {
+    case BetStatus.WON: return 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+    case BetStatus.LOST: return 'bg-[#e2001a]/10 text-[#e2001a] border border-[#e2001a]/20';
+    case BetStatus.CASH_OUT: return 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/20';
+    case BetStatus.REFUNDED: return 'bg-blue-500/10 text-blue-400 border border-blue-500/20';
+    case BetStatus.CANCELLED: return 'bg-zinc-800 text-zinc-500 border border-white/5';
+    default: return 'bg-zinc-800 text-slate-400';
+  }
+};
+
+const getRowHighlightClass = (status: BetStatus) => {
+  switch (status) {
+    case BetStatus.WON: 
+      return 'bg-emerald-500/[0.07] border-emerald-500/20 shadow-[0_0_20px_rgba(16,185,129,0.03)]';
+    case BetStatus.LOST: 
+      return 'bg-red-500/[0.07] border-red-500/20 shadow-[0_0_20px_rgba(226,0,26,0.03)]';
+    case BetStatus.CASH_OUT: 
+      return 'bg-yellow-500/[0.07] border-yellow-500/20 shadow-[0_0_20px_rgba(234,179,8,0.03)]';
+    case BetStatus.REFUNDED: 
+      return 'bg-blue-500/[0.07] border-blue-500/20 shadow-[0_0_20px_rgba(59,130,246,0.03)]';
+    case BetStatus.PENDING: 
+      return 'bg-white/[0.03] border-white/10 shadow-[0_0_20px_rgba(255,255,255,0.01)]';
+    default: 
+      return 'bg-zinc-900/20 border-white/5';
+  }
+};
+
+interface BetRowProps {
+  bet: Bet;
+  visibleColumns: {
+    sportIcon: boolean;
+    bookmaker: boolean;
+    date: boolean;
+    odds: boolean;
+    stake: boolean;
+    profit: boolean;
+    actions: boolean;
+  };
+  onUpdateStatus: (id: string, status: BetStatus, profit?: number) => void;
+  onEdit: (bet: Bet) => void;
+  onDeleteRequest: (id: string) => void;
+}
+
+const BetRow: React.FC<BetRowProps> = React.memo(({ bet, visibleColumns, onUpdateStatus, onEdit, onDeleteRequest }) => {
+  return (
+    <div 
+      className={`glass-panel rounded-2xl p-3 md:p-4 flex flex-col lg:flex-row items-center gap-2 md:gap-4 group hover:border-white/30 transition-all ${getRowHighlightClass(bet.status)}`}
+    >
+      {/* Contenedor Principal (Info + Stats en Móvil) */}
+      <div className="flex items-center gap-2 md:gap-3 flex-1 w-full">
+        {visibleColumns.sportIcon && (
+          <div className="w-8 h-8 md:w-12 md:h-12 rounded-xl bg-zinc-950 border border-white/5 flex items-center justify-center text-base md:text-xl text-slate-300 shadow-inner shrink-0">
+              {getSportIcon(bet.sport)}
+          </div>
+        )}
+        
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+            {visibleColumns.bookmaker && (() => {
+              const brand = getBookmakerBrand(bet.bookmaker);
+              return (
+                <div 
+                  className="relative flex items-center justify-center px-1.5 py-0.5 rounded-md shadow-sm border border-white/5 transition-all hover:scale-105 min-w-[60px] md:min-w-[80px] h-6 md:h-8 overflow-hidden"
+                  style={{ backgroundColor: brand.color }}
+                >
+                  <span 
+                    className="text-[9px] md:text-[11px] font-black uppercase tracking-tighter whitespace-nowrap"
+                    style={{ color: brand.textColor }}
+                  >
+                    {renderBookmakerName(bet.bookmaker)}
+                  </span>
+                  <img 
+                    src={brand.logo} 
+                    alt={bet.bookmaker} 
+                    className="absolute inset-0 w-full h-full object-contain p-0.5 bg-inherit rounded-md opacity-0 transition-opacity duration-300"
+                    style={{ filter: brand.logoFilter }}
+                    referrerPolicy="no-referrer"
+                    onLoad={(e) => {
+                      (e.target as HTMLImageElement).classList.remove('opacity-0');
+                      (e.target as HTMLImageElement).classList.add('opacity-100');
+                    }}
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                </div>
+              );
+            })()}
+            {visibleColumns.date && (
+              <span className="text-[7px] font-bold text-slate-500 uppercase tracking-tighter">{new Date(bet.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}</span>
+            )}
+          </div>
+          <h4 className="font-black text-[10px] md:text-sm text-white leading-tight truncate uppercase italic tracking-tight">{bet.description || bet.sport}</h4>
+        </div>
+        
+        {/* Mobile Stats Summary (Solo visible en móvil) */}
+        <div className="lg:hidden flex flex-col items-end shrink-0">
+           <p className={`text-sm md:text-base font-black tracking-tighter ${bet.status === BetStatus.PENDING ? 'text-zinc-700' : (bet.profit > 0 ? 'text-emerald-400' : bet.profit < 0 ? 'text-[#e2001a]' : 'text-slate-400')}`}>
+              {bet.status === BetStatus.PENDING ? '--' : `${bet.profit > 0 ? '+' : ''}${bet.profit.toFixed(2)}€`}
+           </p>
+           <p className="text-[8px] md:text-[9px] font-black text-zinc-500 tracking-tighter uppercase">{bet.odds.toFixed(2)} @ {bet.stake}€</p>
+        </div>
+      </div>
+
+      {/* Columnas de Escritorio (Ocultas en móvil) */}
+      <div className="flex gap-4 border-x border-white/5 px-4 hidden lg:flex items-center">
+        {visibleColumns.odds && (
+          <div className="text-center bg-zinc-950/40 border border-white/10 px-3 py-1.5 rounded-xl relative overflow-hidden group/odds shadow-inner min-w-[60px]">
+            <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-50"></div>
+            <p className="text-[7px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-0.5 relative z-10">Cuota</p>
+            <p className="text-base font-black text-white tracking-tighter relative z-10">{bet.odds.toFixed(2)}</p>
+          </div>
+        )}
+        {visibleColumns.stake && (
+          <div className="text-center min-w-[60px]">
+            <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest mb-0.5">Apuesta</p>
+            <p className="text-sm font-black text-white">{bet.stake}€</p>
+          </div>
+        )}
+      </div>
+
+      {/* Acciones y Profit (Profit oculto en móvil porque ya está en el summary) */}
+      <div className="flex items-center gap-4 w-full lg:w-auto justify-between lg:justify-end border-t lg:border-t-0 border-white/5 pt-2 lg:pt-0">
+        {visibleColumns.profit && (
+          <div className="text-right min-w-[100px] hidden lg:block">
+              <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest mb-0.5">Beneficio</p>
+              <p className={`text-xl font-black tracking-tighter ${bet.status === BetStatus.PENDING ? 'text-zinc-800' : (bet.profit > 0 ? 'text-emerald-400' : bet.profit < 0 ? 'text-[#e2001a]' : 'text-slate-400')}`}>
+                {bet.status === BetStatus.PENDING ? '--' : `${bet.profit > 0 ? '+' : ''}${bet.profit.toFixed(2)}€`}
+              </p>
+          </div>
+        )}
+
+        {visibleColumns.actions && (
+          <div className="flex items-center justify-between lg:justify-end w-full lg:w-auto gap-3">
+            {/* Indicador de estado para móvil */}
+            <div className="lg:hidden">
+               <span className={`px-1.5 py-0.5 rounded-md text-[7px] font-black uppercase tracking-widest ${getStatusStyle(bet.status)}`}>
+                 {formatStatusText(bet.status)}
+               </span>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              {bet.status === BetStatus.PENDING ? (
+                <>
+                  <button onClick={() => onUpdateStatus(bet.id, BetStatus.WON)} className="w-8 h-8 lg:w-8 lg:h-8 rounded-xl lg:rounded-lg bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 hover:bg-emerald-500 hover:text-white transition-all shadow-sm"><i className="fas fa-check text-[10px]"></i></button>
+                  <button onClick={() => onUpdateStatus(bet.id, BetStatus.LOST)} className="w-8 h-8 lg:w-8 lg:h-8 rounded-xl lg:rounded-lg bg-[#e2001a]/10 text-[#e2001a] border border-[#e2001a]/20 hover:bg-[#e2001a] hover:text-white transition-all shadow-sm"><i className="fas fa-times text-[10px]"></i></button>
+                </>
+              ) : (
+                  <div className={`hidden lg:block px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-[0.1em] shadow-sm ${getStatusStyle(bet.status)}`}>{formatStatusText(bet.status)}</div>
+              )}
+              <div className="flex flex-row gap-1 ml-1 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
+                  <button onClick={() => onEdit(bet)} className="w-8 h-8 lg:w-7 lg:h-7 rounded-xl lg:rounded-lg bg-white/5 lg:bg-transparent text-zinc-500 hover:text-blue-400 transition-all flex items-center justify-center"><i className="fas fa-pencil text-[10px] lg:text-[9px]"></i></button>
+                  <button onClick={() => onDeleteRequest(bet.id)} className="w-8 h-8 lg:w-7 lg:h-7 rounded-xl lg:rounded-lg bg-white/5 lg:bg-transparent text-zinc-500 hover:text-[#e2001a] transition-all flex items-center justify-center"><i className="fas fa-trash text-[10px] lg:text-[9px]"></i></button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+
 const BetList: React.FC<BetListProps> = ({ bets, activeBankrollName, onDelete, onUpdateStatus, onEdit }) => {
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [bookmakerFilter, setBookmakerFilter] = useState<string>('ALL');
@@ -43,7 +205,6 @@ const BetList: React.FC<BetListProps> = ({ bets, activeBankrollName, onDelete, o
   });
   const [showColumnSettings, setShowColumnSettings] = useState(false);
 
-  // Extraer casas únicas de las apuestas actuales para el filtro
   const availableBookmakers = useMemo(() => {
     const books = new Set(bets.map(b => b.bookmaker).filter(Boolean));
     return Array.from(books).sort();
@@ -74,8 +235,6 @@ const BetList: React.FC<BetListProps> = ({ bets, activeBankrollName, onDelete, o
     if (grouping === 'NONE') return { 'Todas las apuestas': { bets: filteredBets, profit: quickStats.profit, stake: filteredBets.reduce((acc, b) => acc + (b.status !== BetStatus.PENDING ? b.stake : 0), 0) } };
 
     const groups: Record<string, { bets: Bet[]; profit: number; stake: number }> = {};
-    
-    // Sort bets by date descending before grouping
     const sortedBets = [...filteredBets].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
     sortedBets.forEach(bet => {
@@ -108,103 +267,84 @@ const BetList: React.FC<BetListProps> = ({ bets, activeBankrollName, onDelete, o
     return groups;
   }, [filteredBets, grouping, quickStats.profit]);
 
-  const toggleGroup = (groupName: string) => {
+  const toggleGroup = useCallback((groupName: string) => {
     setCollapsedGroups(prev => ({
       ...prev,
       [groupName]: !prev[groupName]
     }));
-  };
+  }, []);
 
-  const toggleAllGroups = () => {
+  const toggleAllGroups = useCallback(() => {
     const allGroups = Object.keys(groupedBets);
     const someExpanded = allGroups.some(g => !collapsedGroups[g]);
-    
     const newState: Record<string, boolean> = {};
     allGroups.forEach(g => {
-      newState[g] = someExpanded; // If some are expanded, collapse all.
+      newState[g] = someExpanded;
     });
     setCollapsedGroups(newState);
-  };
-
-  const getRowHighlightClass = (status: BetStatus) => {
-    switch (status) {
-      case BetStatus.WON: 
-        return 'bg-emerald-500/[0.07] border-emerald-500/20 shadow-[0_0_20px_rgba(16,185,129,0.03)]';
-      case BetStatus.LOST: 
-        return 'bg-red-500/[0.07] border-red-500/20 shadow-[0_0_20px_rgba(226,0,26,0.03)]';
-      case BetStatus.CASH_OUT: 
-        return 'bg-yellow-500/[0.07] border-yellow-500/20 shadow-[0_0_20px_rgba(234,179,8,0.03)]';
-      case BetStatus.REFUNDED: 
-        return 'bg-blue-500/[0.07] border-blue-500/20 shadow-[0_0_20px_rgba(59,130,246,0.03)]';
-      case BetStatus.PENDING: 
-        return 'bg-white/[0.03] border-white/10 shadow-[0_0_20px_rgba(255,255,255,0.01)]';
-      default: 
-        return 'bg-zinc-900/20 border-white/5';
-    }
-  };
+  }, [groupedBets, collapsedGroups]);
 
   return (
     <div className="space-y-6 px-4 md:px-0 pb-20 animate-in fade-in slide-in-from-bottom-2 duration-500">
-      <header className="flex flex-col gap-6">
-        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
+      <header className="flex flex-col gap-4 md:gap-6">
+        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 md:gap-6">
           <div>
             <span className="text-[#e2001a] font-black text-[10px] uppercase tracking-[0.5em]">AUDITORÍA DE CUENTAS</span>
-            <h2 className="text-4xl font-black tracking-tight text-white mt-2">{activeBankrollName}</h2>
+            <h2 className="text-3xl md:text-4xl font-black tracking-tight text-white mt-2">{activeBankrollName}</h2>
           </div>
           
-          <div className="flex flex-col sm:flex-row gap-3">
-              {/* Buscador */}
-              <div className="relative group">
+          <div className="flex flex-col sm:flex-row gap-2 md:gap-3 w-full lg:w-auto">
+              <div className="relative group flex-1">
                 <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-zinc-600 group-focus-within:text-[#e2001a] transition-colors"></i>
                 <input 
                     type="text" 
-                    placeholder="Buscar descripción o casa..."
-                    className="bg-zinc-950 border border-white/5 rounded-2xl pl-12 pr-4 py-3 text-xs font-bold text-white outline-none focus:border-[#e2001a]/50 w-full sm:w-64 transition-all"
+                    placeholder="Buscar..."
+                    className="bg-zinc-950 border border-white/5 rounded-2xl pl-11 pr-4 py-3.5 text-xs font-bold text-white outline-none focus:border-[#e2001a]/50 w-full lg:w-64 transition-all shadow-inner"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </div>
 
-              {/* Filtro Casa de Apuestas */}
-              <select 
-                className="bg-zinc-950 border border-white/5 rounded-2xl px-4 py-3 text-xs font-bold text-slate-400 outline-none focus:border-[#e2001a]/50"
-                value={bookmakerFilter}
-                onChange={(e) => setBookmakerFilter(e.target.value)}
-              >
-                <option value="ALL">Todas las Casas</option>
-                {availableBookmakers.map(book => (
-                    <option key={book} value={book}>{book}</option>
-                ))}
-              </select>
-
-              {/* Agrupación */}
-              <div className="flex gap-2">
+              <div className="flex gap-2 w-full sm:w-auto">
                 <select 
-                  className="bg-zinc-950 border border-white/5 rounded-2xl px-4 py-3 text-xs font-bold text-slate-400 outline-none focus:border-[#e2001a]/50"
+                  className="flex-1 sm:flex-none bg-zinc-950 border border-white/5 rounded-2xl px-4 py-3.5 text-xs font-bold text-slate-400 outline-none focus:border-[#e2001a]/50 shadow-inner appearance-none"
+                  value={bookmakerFilter}
+                  onChange={(e) => setBookmakerFilter(e.target.value)}
+                >
+                  <option value="ALL">Casas</option>
+                  {availableBookmakers.map(book => (
+                      <option key={book} value={book}>{book}</option>
+                  ))}
+                </select>
+
+                <select 
+                  className="flex-1 sm:flex-none bg-zinc-950 border border-white/5 rounded-2xl px-4 py-3.5 text-xs font-bold text-slate-400 outline-none focus:border-[#e2001a]/50 shadow-inner appearance-none"
                   value={grouping}
                   onChange={(e) => setGrouping(e.target.value as 'NONE' | 'DAY' | 'WEEK' | 'MONTH' | 'YEAR')}
                 >
                   <option value="NONE">Sin agrupar</option>
-                  <option value="DAY">Por Día</option>
-                  <option value="WEEK">Por Semana</option>
-                  <option value="MONTH">Por Mes</option>
-                  <option value="YEAR">Por Año</option>
+                  <option value="DAY">Día</option>
+                  <option value="WEEK">Semana</option>
+                  <option value="MONTH">Mes</option>
+                  <option value="YEAR">Año</option>
                 </select>
-                
+              </div>
+              
+              <div className="flex gap-2 w-full sm:w-auto">
                 {grouping !== 'NONE' && (
                   <button 
                     onClick={toggleAllGroups}
-                    className="bg-zinc-950 border border-white/5 rounded-2xl px-4 py-3 text-xs font-bold text-slate-400 hover:text-white hover:border-white/20 transition-all"
+                    className="flex-1 sm:flex-none bg-zinc-950 border border-white/5 rounded-2xl px-4 py-3.5 text-xs font-bold text-slate-400 hover:text-white hover:border-white/20 transition-all shadow-inner"
                     title={Object.values(collapsedGroups).some(v => !v) ? "Colapsar todo" : "Expandir todo"}
                   >
                     <i className={`fas ${Object.keys(groupedBets).length > 0 && Object.keys(groupedBets).every(g => collapsedGroups[g]) ? 'fa-expand-arrows-alt' : 'fa-compress-arrows-alt'}`}></i>
                   </button>
                 )}
 
-                <div className="relative">
+                <div className="relative flex-1 sm:flex-none">
                   <button 
                     onClick={() => setShowColumnSettings(!showColumnSettings)}
-                    className="bg-zinc-950 border border-white/5 rounded-2xl px-4 py-3 text-xs font-bold text-slate-400 hover:text-white hover:border-white/20 transition-all"
+                    className="w-full bg-zinc-950 border border-white/5 rounded-2xl px-4 py-3.5 text-xs font-bold text-slate-400 hover:text-white hover:border-white/20 transition-all shadow-inner"
                     title="Configurar columnas"
                   >
                     <i className="fas fa-columns"></i>
@@ -243,7 +383,6 @@ const BetList: React.FC<BetListProps> = ({ bets, activeBankrollName, onDelete, o
           </div>
         </div>
 
-        {/* Filtros de Estado */}
         <div className="flex bg-zinc-950 p-1.5 rounded-2xl border border-white/5 gap-1 overflow-x-auto no-scrollbar">
             {['ALL', 'PENDING', 'WON', 'LOST', 'CASH_OUT'].map(f => (
                 <button
@@ -258,22 +397,22 @@ const BetList: React.FC<BetListProps> = ({ bets, activeBankrollName, onDelete, o
             ))}
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
-          <div className="bg-zinc-900/30 border border-white/5 p-5 rounded-[2rem] backdrop-blur-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="bg-zinc-900/30 border border-white/5 p-4 md:p-5 rounded-2xl md:rounded-[2rem] backdrop-blur-sm">
             <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Profit Segmento</p>
-            <p className={`text-2xl font-black ${quickStats.profit >= 0 ? 'text-emerald-400' : 'text-[#e2001a]'}`}>
+            <p className={`text-xl md:text-2xl font-black ${quickStats.profit >= 0 ? 'text-emerald-400' : 'text-[#e2001a]'}`}>
               {quickStats.profit >= 0 ? '+' : ''}{quickStats.profit.toFixed(1)}€
             </p>
           </div>
-          <div className="bg-zinc-900/30 border border-white/5 p-5 rounded-[2rem] backdrop-blur-sm text-center">
+          <div className="bg-zinc-900/30 border border-white/5 p-4 md:p-5 rounded-2xl md:rounded-[2rem] backdrop-blur-sm text-left sm:text-center">
             <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Eficiencia (Yield)</p>
-            <p className={`text-2xl font-black ${quickStats.yield >= 0 ? 'text-emerald-400' : 'text-[#e2001a]'}`}>
+            <p className={`text-xl md:text-2xl font-black ${quickStats.yield >= 0 ? 'text-emerald-400' : 'text-[#e2001a]'}`}>
               {quickStats.yield.toFixed(1)}%
             </p>
           </div>
-          <div className="bg-zinc-900/30 border border-white/5 p-5 rounded-[2rem] backdrop-blur-sm text-right">
+          <div className="bg-zinc-900/30 border border-white/5 p-4 md:p-5 rounded-2xl md:rounded-[2rem] backdrop-blur-sm text-left sm:text-right">
             <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Muestra</p>
-            <p className="text-2xl font-black text-white">{quickStats.count}</p>
+            <p className="text-xl md:text-2xl font-black text-white">{quickStats.count}</p>
           </div>
         </div>
       </header>
@@ -293,26 +432,26 @@ const BetList: React.FC<BetListProps> = ({ bets, activeBankrollName, onDelete, o
                   <h3 className="text-[10px] font-black text-white uppercase tracking-[0.2em]">{groupName}</h3>
                 </div>
                 
-                <div className="flex items-center gap-6">
-                  <div className="flex items-center gap-6 hidden sm:flex">
+                <div className="flex items-center gap-3 md:gap-6">
+                  <div className="flex items-center gap-3 md:gap-6 hidden sm:flex">
                     <div className="flex flex-col items-end">
                       <span className="text-[7px] font-black text-zinc-500 uppercase tracking-widest">Yield</span>
-                      <span className={`text-sm font-black ${groupData.stake > 0 ? (groupData.profit >= 0 ? 'text-emerald-400' : 'text-[#e2001a]') : 'text-slate-500'}`}>
+                      <span className={`text-xs md:text-sm font-black ${groupData.stake > 0 ? (groupData.profit >= 0 ? 'text-emerald-400' : 'text-[#e2001a]') : 'text-slate-500'}`}>
                         {groupData.stake > 0 ? (groupData.profit / groupData.stake * 100).toFixed(1) : '0.0'}%
                       </span>
                     </div>
-                    <div className="w-px h-8 bg-white/10"></div>
+                    <div className="w-px h-6 md:h-8 bg-white/10"></div>
                   </div>
                   
                   <div className="flex flex-col items-end">
-                    <span className="text-[7px] font-black text-zinc-500 uppercase tracking-widest">Profit Periodo</span>
-                    <span className={`text-lg font-black tracking-tighter ${groupData.profit >= 0 ? 'text-emerald-400' : 'text-[#e2001a]'}`}>
+                    <span className="text-[7px] font-black text-zinc-500 uppercase tracking-widest">Profit</span>
+                    <span className={`text-base md:text-lg font-black tracking-tighter ${groupData.profit >= 0 ? 'text-emerald-400' : 'text-[#e2001a]'}`}>
                       {groupData.profit >= 0 ? '+' : ''}{groupData.profit.toFixed(2)}€
                     </span>
                   </div>
-                  <div className="w-px h-8 bg-white/10"></div>
+                  <div className="w-px h-6 md:h-8 bg-white/10"></div>
                   <div className="bg-zinc-950 px-2 py-1 rounded-lg border border-white/5">
-                    <span className="text-[9px] font-black text-slate-400">{groupData.bets.length} OPS</span>
+                    <span className="text-[8px] md:text-[9px] font-black text-slate-400">{groupData.bets.length} OPS</span>
                   </div>
                 </div>
               </div>
@@ -321,101 +460,14 @@ const BetList: React.FC<BetListProps> = ({ bets, activeBankrollName, onDelete, o
             {!collapsedGroups[groupName] && (
               <div className="grid grid-cols-1 gap-4 animate-in fade-in slide-in-from-top-1 duration-300">
                 {groupData.bets.map(bet => (
-                  <div 
+                  <BetRow 
                     key={bet.id} 
-                    className={`glass-panel rounded-2xl p-3 flex flex-col lg:flex-row items-center gap-3 group hover:border-white/30 transition-all ${getRowHighlightClass(bet.status)}`}
-                  >
-                    <div className="flex items-center gap-3 flex-1 w-full">
-                      {visibleColumns.sportIcon && (
-                        <div className="w-12 h-12 rounded-xl bg-zinc-950 border border-white/5 flex items-center justify-center text-xl text-slate-300 shadow-inner shrink-0">
-                            {getSportIcon(bet.sport)}
-                        </div>
-                      )}
-                      
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                          {visibleColumns.bookmaker && (() => {
-                            const brand = getBookmakerBrand(bet.bookmaker);
-                            return (
-                              <div 
-                                className="relative flex items-center justify-center px-2 py-0.5 rounded-md shadow-sm border border-white/5 transition-all hover:scale-105 min-w-[80px] h-8 overflow-hidden"
-                                style={{ backgroundColor: brand.color }}
-                              >
-                                <span 
-                                  className="text-[11px] font-black uppercase tracking-tighter whitespace-nowrap"
-                                  style={{ color: brand.textColor }}
-                                >
-                                  {renderBookmakerName(bet.bookmaker)}
-                                </span>
-                                <img 
-                                  src={brand.logo} 
-                                  alt={bet.bookmaker} 
-                                  className="absolute inset-0 w-full h-full object-contain p-0.5 bg-inherit rounded-md opacity-0 transition-opacity duration-300"
-                                  style={{ filter: brand.logoFilter }}
-                                  referrerPolicy="no-referrer"
-                                  onLoad={(e) => {
-                                    (e.target as HTMLImageElement).classList.remove('opacity-0');
-                                    (e.target as HTMLImageElement).classList.add('opacity-100');
-                                  }}
-                                  onError={(e) => {
-                                    (e.target as HTMLImageElement).style.display = 'none';
-                                  }}
-                                />
-                              </div>
-                            );
-                          })()}
-                          {visibleColumns.date && (
-                            <span className="text-[8px] font-bold text-slate-500 uppercase tracking-tighter">{new Date(bet.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}</span>
-                          )}
-                        </div>
-                        <h4 className="font-black text-sm text-white leading-tight truncate uppercase italic tracking-tight">{bet.description || bet.sport}</h4>
-                      </div>
-                    </div>
-
-                    <div className="flex gap-4 border-x border-white/5 px-4 hidden lg:flex items-center">
-                      {visibleColumns.odds && (
-                        <div className="text-center bg-zinc-950/40 border border-white/10 px-3 py-1.5 rounded-xl relative overflow-hidden group/odds shadow-inner min-w-[60px]">
-                          <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-50"></div>
-                          <p className="text-[7px] font-black text-zinc-500 uppercase tracking-[0.2em] mb-0.5 relative z-10">Cuota</p>
-                          <p className="text-base font-black text-white tracking-tighter relative z-10">{bet.odds.toFixed(2)}</p>
-                        </div>
-                      )}
-                      {visibleColumns.stake && (
-                        <div className="text-center min-w-[60px]">
-                          <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest mb-0.5">Apuesta</p>
-                          <p className="text-sm font-black text-white">{bet.stake}€</p>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-4 w-full lg:w-auto justify-between lg:justify-end">
-                      {visibleColumns.profit && (
-                        <div className="text-right min-w-[100px]">
-                            <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest mb-0.5">Beneficio</p>
-                            <p className={`text-xl font-black tracking-tighter ${bet.status === BetStatus.PENDING ? 'text-zinc-800' : (bet.profit > 0 ? 'text-emerald-400' : bet.profit < 0 ? 'text-[#e2001a]' : 'text-slate-400')}`}>
-                              {bet.status === BetStatus.PENDING ? '--' : `${bet.profit > 0 ? '+' : ''}${bet.profit.toFixed(2)}€`}
-                            </p>
-                        </div>
-                      )}
-
-                      {visibleColumns.actions && (
-                        <div className="flex items-center gap-1.5">
-                          {bet.status === BetStatus.PENDING ? (
-                            <>
-                              <button onClick={() => onUpdateStatus(bet.id, BetStatus.WON)} className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 hover:bg-emerald-500 hover:text-white transition-all"><i className="fas fa-check text-xs"></i></button>
-                              <button onClick={() => onUpdateStatus(bet.id, BetStatus.LOST)} className="w-8 h-8 rounded-lg bg-[#e2001a]/10 text-[#e2001a] border border-[#e2001a]/20 hover:bg-[#e2001a] hover:text-white transition-all"><i className="fas fa-times text-xs"></i></button>
-                            </>
-                          ) : (
-                              <div className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-[0.1em] shadow-sm ${getStatusStyle(bet.status)}`}>{formatStatusText(bet.status)}</div>
-                          )}
-                          <div className="flex flex-row gap-1 ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button onClick={() => onEdit(bet)} className="w-7 h-7 rounded-lg hover:bg-white/5 text-zinc-700 hover:text-blue-400 transition-all"><i className="fas fa-pencil text-[9px]"></i></button>
-                              <button onClick={() => setBetToDelete(bet.id)} className="w-7 h-7 rounded-lg hover:bg-white/5 text-zinc-700 hover:text-[#e2001a] transition-all"><i className="fas fa-trash text-[9px]"></i></button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                    bet={bet} 
+                    visibleColumns={visibleColumns} 
+                    onUpdateStatus={onUpdateStatus} 
+                    onEdit={onEdit} 
+                    onDeleteRequest={setBetToDelete} 
+                  />
                 ))}
               </div>
             )}
@@ -466,17 +518,6 @@ const BetList: React.FC<BetListProps> = ({ bets, activeBankrollName, onDelete, o
       )}
     </div>
   );
-};
-
-const getStatusStyle = (status: BetStatus) => {
-  switch (status) {
-    case BetStatus.WON: return 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
-    case BetStatus.LOST: return 'bg-[#e2001a]/10 text-[#e2001a] border border-[#e2001a]/20';
-    case BetStatus.CASH_OUT: return 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/20';
-    case BetStatus.REFUNDED: return 'bg-blue-500/10 text-blue-400 border border-blue-500/20';
-    case BetStatus.CANCELLED: return 'bg-zinc-800 text-zinc-500 border border-white/5';
-    default: return 'bg-zinc-800 text-slate-400';
-  }
 };
 
 export default BetList;

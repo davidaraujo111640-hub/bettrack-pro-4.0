@@ -77,6 +77,16 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, bets }) => {
     return { name: bestSport[0], profit: bestSport[1] };
   }, [bets]);
 
+  const averageStake = useMemo(() => {
+    if (bets.length === 0) return 0;
+    return bets.reduce((acc, b) => acc + b.stake, 0) / bets.length;
+  }, [bets]);
+
+  const averageStakePercent = useMemo(() => {
+    if (stats.currentBankroll === 0) return 0;
+    return (averageStake / stats.currentBankroll) * 100;
+  }, [averageStake, stats.currentBankroll]);
+
   const pendingBets = useMemo(() => {
     return bets.filter(b => b.status === BetStatus.PENDING).slice(0, 3);
   }, [bets]);
@@ -92,15 +102,15 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, bets }) => {
   return (
     <div className="space-y-6 pb-12 animate-in fade-in duration-500">
       {/* Header con Estado de Forma */}
-      <header className="px-4 md:px-0 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+      <header className="px-4 md:px-0 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
         <div>
             <span className="text-[#e2001a] font-black text-[10px] uppercase tracking-[0.4em]">CENTRAL DE OPERACIONES</span>
-            <h2 className="text-4xl font-black tracking-tighter text-white mt-1">Hola, Tipster <span className="text-[#ffcc00]">Pro</span></h2>
+            <h2 className="text-3xl md:text-4xl font-black tracking-tighter text-white mt-1">Hola, Tipster <span className="text-[#ffcc00]">Pro</span></h2>
         </div>
         
-        <div className="flex flex-col items-end gap-2">
+        <div className="flex flex-col items-start sm:items-end gap-2 w-full sm:w-auto">
             <span className="text-slate-500 text-[9px] font-black uppercase tracking-widest">Estado de Forma (Últ. 5)</span>
-            <div className="flex gap-1.5">
+            <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1">
                 {lastFiveBets.length > 0 ? lastFiveBets.map((bet, i) => {
                     let colorClass = 'bg-zinc-800 border-zinc-700 text-zinc-500';
                     let label = 'V';
@@ -139,57 +149,57 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, bets }) => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 px-4 md:px-0">
         
         {/* Card Principal: Profit & ROI */}
-        <div className="lg:col-span-8 glass-panel rounded-[2.5rem] p-10 relative overflow-hidden border-white/5">
+        <div className="lg:col-span-8 glass-panel rounded-[2rem] md:rounded-[2.5rem] p-6 md:p-10 relative overflow-hidden border-white/5">
            <div className={`absolute -right-10 -top-10 w-64 h-64 blur-[80px] rounded-full opacity-20 ${stats.totalProfit >= 0 ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
            
-           <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-8">
+           <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
               <div>
                 <span className="text-slate-500 font-black uppercase tracking-widest text-[9px]">Rendimiento Total</span>
                 <div className="flex items-baseline gap-3 mt-1">
-                    <h3 className={`text-6xl font-black tracking-tighter ${stats.totalProfit >= 0 ? 'text-white' : 'text-[#e2001a]'}`}>
-                        {stats.totalProfit >= 0 ? '+' : ''}{stats.totalProfit.toFixed(1)}<span className="text-2xl">€</span>
+                    <h3 className={`text-4xl md:text-6xl font-black tracking-tighter ${stats.totalProfit >= 0 ? 'text-white' : 'text-[#e2001a]'}`}>
+                        {stats.totalProfit >= 0 ? '+' : ''}{stats.totalProfit.toFixed(1)}<span className="text-xl md:text-2xl">€</span>
                     </h3>
                 </div>
-                <div className="flex gap-4 mt-6">
+                <div className="grid grid-cols-3 gap-2 md:flex md:gap-4 mt-6">
                     <div className="flex flex-col">
-                        <span className="text-zinc-600 text-[9px] font-black uppercase tracking-tighter">Yield</span>
-                        <span className={`text-lg font-black ${stats.yield >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{stats.yield.toFixed(1)}%</span>
+                        <span className="text-zinc-600 text-[8px] md:text-[9px] font-black uppercase tracking-tighter">Yield</span>
+                        <span className={`text-base md:text-lg font-black ${stats.yield >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{stats.yield.toFixed(1)}%</span>
                     </div>
-                    <div className="w-px h-10 bg-white/5"></div>
+                    <div className="hidden md:block w-px h-10 bg-white/5"></div>
                     <div className="flex flex-col">
-                        <span className="text-zinc-600 text-[9px] font-black uppercase tracking-tighter">Win Rate</span>
-                        <span className="text-lg font-black text-white">{stats.winRate.toFixed(1)}%</span>
+                        <span className="text-zinc-600 text-[8px] md:text-[9px] font-black uppercase tracking-tighter">Win Rate</span>
+                        <span className="text-base md:text-lg font-black text-white">{stats.winRate.toFixed(1)}%</span>
                     </div>
-                    <div className="w-px h-10 bg-white/5"></div>
+                    <div className="hidden md:block w-px h-10 bg-white/5"></div>
                     <div className="flex flex-col">
-                        <span className="text-zinc-600 text-[9px] font-black uppercase tracking-tighter">Stake Medio</span>
-                        <span className="text-lg font-black text-white">{(bets.reduce((acc, b) => acc + b.stake, 0) / (bets.length || 1)).toFixed(1)}€</span>
+                        <span className="text-zinc-600 text-[8px] md:text-[9px] font-black uppercase tracking-tighter">Stake</span>
+                        <span className="text-base md:text-lg font-black text-white">{averageStake.toFixed(1)}€</span>
                     </div>
                 </div>
               </div>
 
-              <div className="bg-white/5 rounded-3xl p-6 border border-white/5 flex flex-col justify-between">
+              <div className="bg-white/5 rounded-2xl md:rounded-3xl p-4 md:p-6 border border-white/5 flex flex-col justify-between">
                  <div className="flex justify-between items-start">
                     <div>
                         <span className="text-slate-500 font-black uppercase tracking-widest text-[9px]">Especialidad</span>
-                        <h4 className="text-white font-black text-xl mt-1">{topPerformance ? topPerformance.name : 'Pendiente'}</h4>
+                        <h4 className="text-white font-black text-lg md:text-xl mt-1">{topPerformance ? topPerformance.name : 'Pendiente'}</h4>
                     </div>
-                    <div className="bg-zinc-950 text-white w-16 h-16 rounded-2xl flex items-center justify-center text-4xl border border-white/10 shadow-2xl">
+                    <div className="bg-zinc-950 text-white w-12 h-12 md:w-16 md:h-16 rounded-xl md:rounded-2xl flex items-center justify-center text-2xl md:text-4xl border border-white/10 shadow-2xl">
                         {getSportIcon(topPerformance?.name || 'Otros')}
                     </div>
              </div>
              <div className="mt-4 pt-4 border-t border-white/5">
-                    <p className="text-[10px] font-bold text-slate-400">Has generado <span className="text-emerald-400 font-black">+{topPerformance?.profit?.toFixed(1) ?? '0.0'}€</span> solo en este deporte. ¡Sigue así!</p>
+                    <p className="text-[9px] md:text-[10px] font-bold text-slate-400">Has generado <span className="text-emerald-400 font-black">+{topPerformance?.profit?.toFixed(1) ?? '0.0'}€</span> en este deporte.</p>
                  </div>
               </div>
            </div>
         </div>
 
         {/* Card Bankroll: Progreso */}
-        <div className="lg:col-span-4 glass-panel rounded-[2.5rem] p-8 border-white/5 flex flex-col justify-between">
+        <div className="lg:col-span-4 glass-panel rounded-[2rem] md:rounded-[2.5rem] p-6 md:p-8 border-white/5 flex flex-col justify-between">
            <div>
                 <span className="text-slate-500 font-black uppercase tracking-widest text-[9px]">Banca Disponible</span>
-                <p className="text-4xl font-black text-white mt-1">{stats.currentBankroll.toFixed(1)}€</p>
+                <p className="text-3xl md:text-4xl font-black text-white mt-1">{stats.currentBankroll.toFixed(1)}€</p>
            </div>
            
            <div className="relative py-6 flex flex-col items-center">
@@ -223,12 +233,12 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, bets }) => {
       {/* Sección Inferior: Gráfico y Pendientes */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 px-4 md:px-0">
         {/* Curva de Rendimiento */}
-        <div className="lg:col-span-8 glass-panel rounded-[2.5rem] p-8 border-white/5">
+        <div className="lg:col-span-8 glass-panel rounded-[2rem] md:rounded-[2.5rem] p-6 md:p-8 border-white/5">
             <div className="flex items-center justify-between mb-8">
-                <h3 className="text-sm font-black text-white uppercase tracking-widest italic">Curva de Profit</h3>
-                <div className="bg-zinc-950 px-3 py-1 rounded-lg border border-white/5 text-[10px] font-black text-zinc-500">ÚLTIMOS MOVIMIENTOS</div>
+                <h3 className="text-xs md:text-sm font-black text-white uppercase tracking-widest italic">Curva de Profit</h3>
+                <div className="bg-zinc-950 px-3 py-1 rounded-lg border border-white/5 text-[9px] md:text-[10px] font-black text-zinc-500">HISTÓRICO</div>
             </div>
-            <div className="h-[300px] w-full">
+            <div className="h-[200px] md:h-[300px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={chartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                     <defs>
@@ -298,7 +308,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, bets }) => {
                 </div>
                 <h4 className="font-black text-lg italic">Gestión de Riesgo</h4>
                 <p className="text-xs font-bold text-white/70 mt-1 leading-relaxed">
-                    Tu stake medio es del {((bets.reduce((acc, b) => acc + b.stake, 0) / (bets.length || 1) / stats.currentBankroll) * 100).toFixed(1)}% de tu banca actual. ¡Mantén la disciplina!
+                    Tu stake medio es del {averageStakePercent.toFixed(1)}% de tu banca actual. ¡Mantén la disciplina!
                 </p>
             </div>
         </div>

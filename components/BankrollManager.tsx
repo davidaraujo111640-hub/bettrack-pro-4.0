@@ -125,33 +125,33 @@ const BankrollManager: React.FC<BankrollManagerProps> = ({ bankrolls, bets, acti
       <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <span className="text-[#e2001a] font-bold text-xs uppercase tracking-[0.3em]">GESTIÓN</span>
-          <h2 className="text-4xl font-black tracking-tight text-white uppercase italic">Bankrolls</h2>
+          <h2 className="text-3xl md:text-4xl font-black tracking-tight text-white uppercase italic">Bankrolls</h2>
         </div>
         <div className="flex flex-wrap gap-2">
           <button 
             onClick={() => setShowArchived(!showArchived)} 
-            className={`px-4 py-3 rounded-2xl font-black uppercase text-[10px] transition-all border ${
+            className={`flex-1 sm:flex-none px-4 py-3 rounded-2xl font-black uppercase text-[10px] transition-all border ${
               showArchived ? 'bg-[#ffcc00] text-black border-[#ffcc00]' : 'bg-white/5 border-white/5 text-slate-400 hover:text-white'
             }`}
           >
             <i className={`fas ${showArchived ? 'fa-box-open' : 'fa-archive'} mr-2`}></i> 
-            {showArchived ? 'Ver Activos' : 'Ver Archivados'}
+            {showArchived ? 'Activos' : 'Archivados'}
           </button>
           <button 
             onClick={() => fileInputRef.current?.click()} 
-            className="bg-white/5 border border-white/5 text-slate-400 px-4 py-3 rounded-2xl font-black uppercase text-[10px] hover:text-white transition-all"
+            className="flex-1 sm:flex-none bg-white/5 border border-white/5 text-slate-400 px-4 py-3 rounded-2xl font-black uppercase text-[10px] hover:text-white transition-all"
           >
             <i className="fas fa-file-import mr-2"></i> Importar
           </button>
           <button 
             onClick={exportData} 
-            className="bg-white/5 border border-white/5 text-slate-400 px-4 py-3 rounded-2xl font-black uppercase text-[10px] hover:text-white transition-all"
+            className="flex-1 sm:flex-none bg-white/5 border border-white/5 text-slate-400 px-4 py-3 rounded-2xl font-black uppercase text-[10px] hover:text-white transition-all"
           >
             <i className="fas fa-file-export mr-2"></i> Backup
           </button>
           <button 
             onClick={() => setIsAdding(true)} 
-            className="bg-[#e2001a] text-white px-6 py-3 rounded-2xl font-black uppercase text-xs hover:bg-[#c10016] transition-all shadow-lg shadow-red-900/20"
+            className="w-full sm:w-auto bg-[#e2001a] text-white px-6 py-3 rounded-2xl font-black uppercase text-xs hover:bg-[#c10016] transition-all shadow-lg shadow-red-900/20"
           >
             Añadir Nuevo
           </button>
@@ -215,7 +215,7 @@ const BankrollManager: React.FC<BankrollManagerProps> = ({ bankrolls, bets, acti
             <div 
               key={bank.id} 
               onClick={() => handleSelect(bank.id)}
-              className={`glass-panel rounded-[2rem] p-8 transition-all text-left flex flex-col relative group cursor-pointer ${
+              className={`glass-panel rounded-[2rem] p-6 md:p-8 transition-all text-left flex flex-col relative group cursor-pointer ${
                 activeBankrollId === bank.id 
                   ? 'border-[#e2001a] ring-2 ring-[#e2001a]/20 bg-[#e2001a]/5' 
                   : 'border-white/5 hover:border-white/20'
@@ -251,25 +251,25 @@ const BankrollManager: React.FC<BankrollManagerProps> = ({ bankrolls, bets, acti
                   </button>
                 </div>
               </div>
-              <div className={`w-12 h-12 rounded-2xl bg-[#e2001a] mb-6 flex items-center justify-center text-xl font-black text-white shadow-lg shadow-red-900/30 group-hover:scale-110 transition-transform ${bank.archived ? 'grayscale opacity-50' : ''}`}>
+              <div className={`w-10 h-10 md:w-12 md:h-12 rounded-2xl bg-[#e2001a] mb-4 md:mb-6 flex items-center justify-center text-lg md:text-xl font-black text-white shadow-lg shadow-red-900/30 group-hover:scale-110 transition-transform ${bank.archived ? 'grayscale opacity-50' : ''}`}>
                 {bank.name.charAt(0)}
               </div>
-              <h3 className={`text-xl font-black text-white ${bank.archived ? 'opacity-50' : ''}`}>{bank.name}</h3>
+              <h3 className={`text-lg md:text-xl font-black text-white ${bank.archived ? 'opacity-50' : ''}`}>{bank.name}</h3>
               
-              <div className="grid grid-cols-3 gap-2 mt-6">
+              <div className="grid grid-cols-3 gap-1 md:gap-2 mt-4 md:mt-6">
                 <div>
-                  <p className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">Inicial</p>
-                  <p className="text-sm font-black text-white">{stats.initial.toLocaleString()}€</p>
+                  <p className="text-[7px] md:text-[8px] text-slate-500 font-bold uppercase tracking-widest">Inicial</p>
+                  <p className="text-[11px] md:text-sm font-black text-white truncate">{stats.initial.toLocaleString()}€</p>
                 </div>
                 <div>
-                  <p className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">Profit</p>
-                  <p className={`text-sm font-black ${stats.profit >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                  <p className="text-[7px] md:text-[8px] text-slate-500 font-bold uppercase tracking-widest">Profit</p>
+                  <p className={`text-[11px] md:text-sm font-black truncate ${stats.profit >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
                     {stats.profit >= 0 ? '+' : ''}{stats.profit.toLocaleString()}€
                   </p>
                 </div>
                 <div>
-                  <p className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">Yield</p>
-                  <p className={`text-sm font-black ${stats.yield >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                  <p className="text-[7px] md:text-[8px] text-slate-500 font-bold uppercase tracking-widest">Yield</p>
+                  <p className={`text-[11px] md:text-sm font-black truncate ${stats.yield >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
                     {stats.yield.toFixed(1)}%
                   </p>
                 </div>
@@ -277,7 +277,7 @@ const BankrollManager: React.FC<BankrollManagerProps> = ({ bankrolls, bets, acti
               
               <div className="mt-4 pt-4 border-t border-white/5">
                 <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Capital Actual</p>
-                <p className="text-3xl font-black text-white mt-1">{stats.current.toLocaleString()}€</p>
+                <p className="text-2xl md:text-3xl font-black text-white mt-1">{stats.current.toLocaleString()}€</p>
               </div>
             </div>
           );

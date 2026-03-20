@@ -1,5 +1,5 @@
 
-import React, { useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Bet, BankrollStats, BetStatus, Bankroll } from '../types';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid, AreaChart, Area } from 'recharts';
 
@@ -45,6 +45,14 @@ const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
 };
 
 const Statistics: React.FC<StatisticsProps> = ({ bets, stats, bankrolls, activeBankrollId, onSelectBankroll }) => {
+  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
+
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const sportDistribution = useMemo(() => {
     const dist = bets.reduce((acc: { name: string; value: number; profit: number }[], bet) => {
       const existing = acc.find(a => a.name === bet.sport);
@@ -96,31 +104,37 @@ const Statistics: React.FC<StatisticsProps> = ({ bets, stats, bankrolls, activeB
     return dataMax / (dataMax - dataMin);
   }, [bankrollEvolution]);
 
-  const statusDistribution = [
+  const statusDistribution = useMemo(() => [
     { name: 'Ganada', value: bets.filter(b => b.status === BetStatus.WON).length },
     { name: 'Perdida', value: bets.filter(b => b.status === BetStatus.LOST).length },
     { name: 'Otras', value: bets.filter(b => b.status !== BetStatus.WON && b.status !== BetStatus.LOST && b.status !== BetStatus.PENDING).length },
-  ].filter(s => s.value > 0);
+  ].filter(s => s.value > 0), [bets]);
 
-  const wonCount = bets.filter(b => b.status === BetStatus.WON).length;
-  const lostCount = bets.filter(b => b.status === BetStatus.LOST).length;
-  const totalClosed = statusDistribution.reduce((acc, s) => acc + s.value, 0);
-  const wonPercent = totalClosed > 0 ? (wonCount / totalClosed) * 100 : 0;
-  const lostPercent = totalClosed > 0 ? (lostCount / totalClosed) * 100 : 0;
+  const { wonCount, lostCount, wonPercent, lostPercent } = useMemo(() => {
+    const won = bets.filter(b => b.status === BetStatus.WON).length;
+    const lost = bets.filter(b => b.status === BetStatus.LOST).length;
+    const total = statusDistribution.reduce((acc, s) => acc + s.value, 0);
+    return {
+      wonCount: won,
+      lostCount: lost,
+      wonPercent: total > 0 ? (won / total) * 100 : 0,
+      lostPercent: total > 0 ? (lost / total) * 100 : 0,
+    };
+  }, [bets, statusDistribution]);
 
   return (
     <div className="space-y-8 px-4 md:px-0 pb-20">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
           <span className="text-[#e2001a] font-bold text-xs uppercase tracking-[0.3em]">ANALYTICS</span>
-          <h2 className="text-4xl font-black tracking-tight text-white mt-2">Estadísticas</h2>
+          <h2 className="text-3xl md:text-4xl font-black tracking-tight text-white mt-2">Estadísticas</h2>
         </div>
 
         {/* Bankroll Selector */}
-        <div className="flex flex-wrap gap-2">
+        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2 -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap">
           <button 
             onClick={() => onSelectBankroll('all')}
-            className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${
+            className={`whitespace-nowrap px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${
               activeBankrollId === 'all' 
               ? 'bg-[#e2001a] text-white border-[#e2001a] shadow-lg shadow-red-900/20' 
               : 'bg-zinc-900 text-slate-400 border-white/5 hover:border-white/10'
@@ -132,7 +146,7 @@ const Statistics: React.FC<StatisticsProps> = ({ bets, stats, bankrolls, activeB
             <button 
               key={b.id}
               onClick={() => onSelectBankroll(b.id)}
-              className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${
+              className={`whitespace-nowrap px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${
                 activeBankrollId === b.id 
                 ? 'bg-[#e2001a] text-white border-[#e2001a] shadow-lg shadow-red-900/20' 
                 : 'bg-zinc-900 text-slate-400 border-white/5 hover:border-white/10'
@@ -145,45 +159,54 @@ const Statistics: React.FC<StatisticsProps> = ({ bets, stats, bankrolls, activeB
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="glass-panel p-8 rounded-[2.5rem] flex flex-col items-center border-white/5">
-          <h3 className="text-lg font-black mb-6 w-full text-white uppercase italic">Éxito por Estados</h3>
-          <div className="relative h-64 w-full flex items-center justify-center">
+        <div className="glass-panel p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] flex flex-col items-center border-white/5">
+          <h3 className="text-base md:text-lg font-black mb-6 w-full text-white uppercase italic">Éxito por Estados</h3>
+          <div className="relative h-48 md:h-64 w-full flex items-center justify-center">
             {/* Left: Won */}
             <div className="absolute left-0 flex flex-col items-center z-10 pointer-events-none">
-              <span className="text-[8px] font-black text-emerald-500 uppercase tracking-widest opacity-60">Ganadas</span>
-              <span className="text-2xl font-black text-white leading-none">{wonCount}</span>
-              <span className="text-[10px] font-black text-emerald-400/80 mt-1">{wonPercent.toFixed(1)}%</span>
+              <span className="text-[7px] md:text-[8px] font-black text-emerald-500 uppercase tracking-widest opacity-60">Ganadas</span>
+              <span className="text-xl md:text-2xl font-black text-white leading-none">{wonCount}</span>
+              <span className="text-[9px] md:text-[10px] font-black text-emerald-400/80 mt-1">{wonPercent.toFixed(1)}%</span>
             </div>
 
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie data={statusDistribution} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={10} dataKey="value" stroke="none">
+                <Pie 
+                  data={statusDistribution} 
+                  cx="50%" 
+                  cy="50%" 
+                  innerRadius={windowWidth < 640 ? 35 : 60} 
+                  outerRadius={windowWidth < 640 ? 55 : 80} 
+                  paddingAngle={10} 
+                  dataKey="value" 
+                  stroke="none"
+                >
                   {statusDistribution.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
                 </Pie>
                 <Tooltip content={<CustomTooltip />} />
-                <Legend verticalAlign="bottom" height={36}/>
+                <Legend verticalAlign="bottom" height={36} iconSize={10} wrapperStyle={{fontSize: '10px', fontWeight: 'bold'}}/>
               </PieChart>
             </ResponsiveContainer>
 
             {/* Right: Lost */}
             <div className="absolute right-0 flex flex-col items-center z-10 pointer-events-none">
-              <span className="text-[8px] font-black text-[#e2001a] uppercase tracking-widest opacity-60">Perdidas</span>
-              <span className="text-2xl font-black text-white leading-none">{lostCount}</span>
-              <span className="text-[10px] font-black text-red-400/80 mt-1">{lostPercent.toFixed(1)}%</span>
+              <span className="text-[7px] md:text-[8px] font-black text-[#e2001a] uppercase tracking-widest opacity-60">Perdidas</span>
+              <span className="text-xl md:text-2xl font-black text-white leading-none">{lostCount}</span>
+              <span className="text-[9px] md:text-[10px] font-black text-red-400/80 mt-1">{lostPercent.toFixed(1)}%</span>
             </div>
           </div>
         </div>
 
-        <div className="glass-panel p-8 rounded-[2.5rem] border-white/5">
-          <h3 className="text-lg font-black mb-6 text-white uppercase italic">Profit por Deporte</h3>
-          <div className="h-64 w-full">
+        <div className="glass-panel p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border-white/5">
+          <h3 className="text-base md:text-lg font-black mb-6 text-white uppercase italic">Profit por Deporte</h3>
+          <div className="h-48 md:h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={sportDistribution}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#262626" vertical={false} />
-                <XAxis dataKey="name" stroke="#525252" fontSize={10} tickLine={false} axisLine={false} fontWeight="800" />
-                <YAxis stroke="#525252" fontSize={10} tickLine={false} axisLine={false} fontWeight="800" />
+                <XAxis dataKey="name" stroke="#525252" fontSize={9} tickLine={false} axisLine={false} fontWeight="800" />
+                <YAxis stroke="#525252" fontSize={9} tickLine={false} axisLine={false} fontWeight="800" />
                 <Tooltip content={<CustomTooltip />} />
-                <Bar dataKey="profit" radius={[10, 10, 0, 0]}>
+                <Bar dataKey="profit" radius={[6, 6, 0, 0]}>
                   {sportDistribution.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.profit >= 0 ? '#10b981' : '#e2001a'} />)}
                 </Bar>
               </BarChart>
@@ -191,10 +214,10 @@ const Statistics: React.FC<StatisticsProps> = ({ bets, stats, bankrolls, activeB
           </div>
         </div>
 
-        <div className="md:col-span-2 glass-panel p-8 rounded-[2.5rem] border-white/5">
+        <div className="md:col-span-2 glass-panel p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border-white/5">
           <div className="flex items-center justify-between mb-8">
-            <h3 className="text-lg font-black text-white uppercase italic">Evolución del Bankroll</h3>
-            <div className="flex items-center gap-4">
+            <h3 className="text-base md:text-lg font-black text-white uppercase italic">Evolución del Bankroll</h3>
+            <div className="flex items-center gap-4 hidden sm:flex">
               <div className="flex items-center gap-2">
                 <div className={`w-3 h-3 rounded-full ${stats.totalProfit >= 0 ? 'bg-emerald-500' : 'bg-[#e2001a]'}`}></div>
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Balance Total</span>
@@ -202,7 +225,7 @@ const Statistics: React.FC<StatisticsProps> = ({ bets, stats, bankrolls, activeB
             </div>
           </div>
           
-          <div className="h-80 w-full">
+          <div className="h-64 md:h-80 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={bankrollEvolution}>
                 <defs>

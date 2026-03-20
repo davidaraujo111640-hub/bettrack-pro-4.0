@@ -54,33 +54,33 @@ const BookmakerManager: React.FC<BookmakerManagerProps> = ({ bookmakers, onUpdat
   return (
     <div className="space-y-8 px-4 md:px-0 pb-20 animate-in fade-in slide-in-from-bottom-2 duration-500">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div>
+        <div className="w-full">
           <span className="text-[#e2001a] font-black text-[10px] uppercase tracking-[0.5em]">CONFIGURACIÓN</span>
-          <h2 className="text-4xl font-black tracking-tight text-white mt-2 italic">CASAS DE APUESTAS</h2>
-          <p className="text-slate-500 font-bold text-xs mt-2">Activa o desactiva las plataformas que quieres ver en tus desplegables</p>
+          <h2 className="text-3xl md:text-4xl font-black tracking-tight text-white mt-2 italic">CASAS DE APUESTAS</h2>
+          <p className="text-slate-500 font-bold text-[10px] md:text-xs mt-2">Activa o desactiva las plataformas que quieres ver en tus desplegables</p>
           
           <div className="flex flex-wrap gap-2 mt-4">
             <button 
               onClick={() => toggleAll(true)}
-              className="px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-[10px] font-black text-emerald-500 uppercase tracking-widest hover:bg-emerald-500 hover:text-white transition-all"
+              className="flex-1 sm:flex-none px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-[10px] font-black text-emerald-500 uppercase tracking-widest hover:bg-emerald-500 hover:text-white transition-all"
             >
-              Activar Todas
+              Activar
             </button>
             <button 
               onClick={() => toggleAll(false)}
-              className="px-4 py-2 bg-red-500/10 border border-red-500/20 rounded-xl text-[10px] font-black text-red-500 uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all"
+              className="flex-1 sm:flex-none px-4 py-2 bg-red-500/10 border border-red-500/20 rounded-xl text-[10px] font-black text-red-500 uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all"
             >
-              Desactivar Todas
+              Desactivar
             </button>
             <button 
               onClick={() => setIsAdding(true)}
-              className="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-[10px] font-black text-slate-400 uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all"
+              className="flex-1 sm:flex-none px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-[10px] font-black text-slate-400 uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all"
             >
-              <i className="fas fa-plus mr-2"></i> Añadir Casa
+              <i className="fas fa-plus mr-2"></i> Añadir
             </button>
           </div>
         </div>
-        <div className="bg-zinc-900 border border-white/5 rounded-2xl px-6 py-3 flex items-center gap-3">
+        <div className="bg-zinc-900 border border-white/5 rounded-2xl px-6 py-3 flex items-center gap-3 w-fit">
           <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
           <span className="text-[10px] font-black text-white uppercase tracking-widest">{enabledCount} ACTIVAS</span>
         </div>
