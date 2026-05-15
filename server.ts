@@ -1,9 +1,4 @@
 
-try {
-  await import("dotenv/config");
-} catch (e) {
-  console.warn("Aviso: No se pudo cargar dotenv manualmente. Si usas --env-file de Node.js, esto es normal.");
-}
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
