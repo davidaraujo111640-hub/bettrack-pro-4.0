@@ -2,19 +2,14 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "framework": null,
-  "functions": {
-    "dist/server.cjs": {
-      "runtime": "nodejs20.x"
-    }
-  },
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "dist/server.cjs"
+      "dest": "/dist/server.cjs"
     },
     {
       "src": "/(.*)",
-      "dest": "dist/server.cjs"
+      "dest": "/dist/server.cjs"
     }
   ]
 }
