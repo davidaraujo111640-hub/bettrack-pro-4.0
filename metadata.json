@@ -1,0 +1,6 @@
+{
+  "name": "BetTrack Pro",
+  "description": "Una aplicación avanzada para el seguimiento de apuestas deportivas con análisis detallados, gestión de bankroll y registro automático mediante captura de pantalla con IA.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
