@@ -1,15 +1,3 @@
 {
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "framework": null,
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "/dist/server.cjs"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/dist/server.cjs"
-    }
-  ]
+  "framework": "vite"
 }
