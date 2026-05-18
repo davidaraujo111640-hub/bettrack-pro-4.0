@@ -103,4 +103,4 @@ Usa null para campos que no puedas identificar.`,
   });
 }
 
-startServer(); migrar a Claude API
+startServer();
