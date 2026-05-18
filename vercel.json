@@ -1,19 +1,20 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "dist/server.cjs",
-      "use": "@vercel/node"
+  "buildCommand": "chmod +x node_modules/.bin/vite node_modules/.bin/esbuild && npx vite build && npx esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+  "outputDirectory": "dist",
+  "functions": {
+    "api/extract-bet.js": {
+      "memory": 1024,
+      "maxDuration": 30
     }
-  ],
-  "routes": [
+  },
+  "rewrites": [
     {
-      "src": "/api/(.*)",
-      "dest": "dist/server.cjs"
+      "source": "/api/extract-bet",
+      "destination": "/api/extract-bet"
     },
     {
-      "src": "/(.*)",
-      "dest": "dist/server.cjs"
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
