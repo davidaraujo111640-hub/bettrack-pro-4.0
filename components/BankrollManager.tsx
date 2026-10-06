@@ -2,6 +2,7 @@
 import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bankroll, Bet, BetStatus } from '../types';
+import { calculateYield } from '../src/utils/betMath';
 import { 
   Archive, 
   PackageOpen, 
@@ -20,9 +21,11 @@ interface BankrollManagerProps {
   activeBankrollId: string;
   onUpdate: (banks: Bankroll[]) => void;
   onSelect: (id: string) => void;
+  onExportBackup: () => void;
+  onImportBackup: (file: File) => void;
 }
 
-const BankrollManager: React.FC<BankrollManagerProps> = ({ bankrolls, bets, activeBankrollId, onUpdate, onSelect }) => {
+const BankrollManager: React.FC<BankrollManagerProps> = ({ bankrolls, bets, activeBankrollId, onUpdate, onSelect, onExportBackup, onImportBackup }) => {
   const navigate = useNavigate();
   const [isAdding, setIsAdding] = useState(false);
   const [editingBank, setEditingBank] = useState<Bankroll | null>(null);
@@ -53,7 +56,7 @@ const BankrollManager: React.FC<BankrollManagerProps> = ({ bankrolls, bets, acti
       initial,
       profit,
       current: initial + profit,
-      yield: totalStake > 0 ? (profit / totalStake) * 100 : 0
+      yield: calculateYield(profit, totalStake)
     };
   };
 
@@ -101,43 +104,11 @@ const BankrollManager: React.FC<BankrollManagerProps> = ({ bankrolls, bets, acti
     setConfirmText('');
   };
 
-  const exportData = () => {
-    const data = {
-      bankrolls: JSON.parse(localStorage.getItem('bt_bankrolls') || '[]'),
-      bets: JSON.parse(localStorage.getItem('bet_track_bets') || '[]'),
-      exportDate: new Date().toISOString()
-    };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `BetTrack_Backup_${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const data = JSON.parse(event.target?.result as string);
-        if (data.bankrolls && data.bets) {
-          if (window.confirm('¿Estás seguro? Esto reemplazará todos tus datos actuales.')) {
-            localStorage.setItem('bt_bankrolls', JSON.stringify(data.bankrolls));
-            localStorage.setItem('bet_track_bets', JSON.stringify(data.bets));
-            window.location.reload();
-          }
-        } else {
-          alert('El archivo no tiene el formato correcto de BetTrack.');
-        }
-      } catch {
-        alert('Error al leer el archivo.');
-      }
-    };
-    reader.readAsText(file);
+    if (file) onImportBackup(file);
+    // Permite volver a elegir el mismo archivo
+    e.target.value = '';
   };
 
   const visibleBankrolls = bankrolls.filter(b => showArchived ? b.archived : !b.archived);
@@ -166,7 +137,7 @@ const BankrollManager: React.FC<BankrollManagerProps> = ({ bankrolls, bets, acti
             <FileUp className="w-4 h-4 mr-2 inline-block" /> Importar
           </button>
           <button 
-            onClick={exportData} 
+            onClick={onExportBackup}
             className="flex-1 sm:flex-none bg-white/5 border border-white/5 text-slate-400 px-4 py-3 rounded-2xl font-black uppercase text-[10px] hover:text-white transition-all"
           >
             <FileDown className="w-4 h-4 mr-2 inline-block" /> Backup

@@ -219,17 +219,19 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, bets, userName, onProfileC
                         {stats.totalProfit >= 0 ? '+' : ''}{stats.totalProfit.toFixed(1)}<span className="text-xl md:text-2xl ml-1">€</span>
                     </h3>
                 </div>
-                <div className="grid grid-cols-3 gap-2 md:flex md:gap-6 mt-8">
-                    <div className="flex flex-col">
+                <div className="grid grid-cols-2 gap-x-6 gap-y-4 mt-8">
+                    <div className="flex flex-col" title="Beneficio respecto al capital inicial del bankroll">
+                        <span className="text-zinc-600 text-[8px] md:text-[9px] font-black uppercase tracking-tighter">ROI</span>
+                        <span className={`text-lg md:text-xl font-black ${stats.roi >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{stats.roi.toFixed(1)}%</span>
+                    </div>
+                    <div className="flex flex-col" title="Beneficio respecto al total apostado">
                         <span className="text-zinc-600 text-[8px] md:text-[9px] font-black uppercase tracking-tighter">Yield</span>
                         <span className={`text-lg md:text-xl font-black ${stats.yield >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{stats.yield.toFixed(1)}%</span>
                     </div>
-                    <div className="hidden md:block w-px h-12 bg-white/10"></div>
                     <div className="flex flex-col">
                         <span className="text-zinc-600 text-[8px] md:text-[9px] font-black uppercase tracking-tighter">Win Rate</span>
                         <span className="text-lg md:text-xl font-black text-white">{stats.winRate.toFixed(1)}%</span>
                     </div>
-                    <div className="hidden md:block w-px h-12 bg-white/10"></div>
                     <div className="flex flex-col">
                         <span className="text-zinc-600 text-[8px] md:text-[9px] font-black uppercase tracking-tighter">Stake Medio</span>
                         <span className="text-lg md:text-xl font-black text-white">{averageStake.toFixed(1)}€</span>

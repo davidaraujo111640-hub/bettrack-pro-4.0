@@ -13,6 +13,8 @@ import ConfirmModal from './components/ConfirmModal';
 import ProfileModal from './components/ProfileModal';
 import { Bet, BetStatus, BankrollStats, Bankroll, User, Bookmaker } from './types';
 import { getBookmakerIcon } from './src/utils/bookmakers';
+import { calculateProfit, calculateRoi, calculateYield } from './src/utils/betMath';
+import { BackupData, downloadBackup, parseBackup } from './src/utils/backup';
 import { 
   Home, 
   ListCheck, 
@@ -148,6 +150,7 @@ const App: React.FC = () => {
   const [toast, setToast] = useState<{message: string, type: 'success' | 'error' | 'info'} | null>(null);
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [pendingRestore, setPendingRestore] = useState<BackupData | null>(null);
 
   const updateLastSaved = useCallback(() => setLastSaved(new Date().toLocaleTimeString()), []);
 
@@ -195,8 +198,8 @@ const App: React.FC = () => {
 
     return {
       totalProfit,
-      roi: totalStake > 0 ? (totalProfit / totalStake) * 100 : 0,
-      yield: totalStake > 0 ? (totalProfit / totalStake) * 100 : 0,
+      roi: calculateRoi(totalProfit, initialCap),
+      yield: calculateYield(totalProfit, totalStake),
       winRate: closedBets.length > 0 ? (wonBets / closedBets.length) * 100 : 0,
       totalBets: filteredBets.length,
       activeBets: filteredBets.filter(b => b.status === BetStatus.PENDING).length,
@@ -206,11 +209,8 @@ const App: React.FC = () => {
   }, [filteredBets, activeBankrollId, bankrolls]);
 
   const handleAddBet = useCallback((newBet: Omit<Bet, 'id' | 'profit'> & { manualProfit?: number }) => {
-    let profit = 0;
-    if (newBet.status === BetStatus.WON) profit = (newBet.odds * newBet.stake) - newBet.stake;
-    else if (newBet.status === BetStatus.LOST) profit = -newBet.stake;
-    else if (newBet.status === BetStatus.CASH_OUT) profit = (newBet.manualProfit || 0) - newBet.stake;
-    else if (newBet.status === BetStatus.REFUNDED || newBet.status === BetStatus.CANCELLED) profit = 0;
+    const { manualProfit, ...betData } = newBet;
+    const profit = calculateProfit(betData.status, betData.odds, betData.stake, manualProfit);
 
     // Ensure the bankroll exists
     const bankrollExists = bankrolls.some(b => b.id === newBet.bankrollId);
@@ -227,10 +227,10 @@ const App: React.FC = () => {
 
     setBets(prevBets => {
       if (editingBet) {
-        return prevBets.map(b => b.id === editingBet.id ? { ...newBet, id: editingBet.id, profit } : b);
+        return prevBets.map(b => b.id === editingBet.id ? { ...betData, id: editingBet.id, profit } : b);
       } else {
         const betWithId: Bet = {
-          ...newBet,
+          ...betData,
           id: Math.random().toString(36).substr(2, 9),
           profit
         };
@@ -251,11 +251,7 @@ const App: React.FC = () => {
   const handleUpdateStatus = useCallback((id: string, newStatus: BetStatus, manualProfit?: number) => {
     setBets(prevBets => prevBets.map(bet => {
       if (bet.id === id) {
-        let profit = 0;
-        if (newStatus === BetStatus.WON) profit = (bet.odds * bet.stake) - bet.stake;
-        else if (newStatus === BetStatus.LOST) profit = -bet.stake;
-        else if (newStatus === BetStatus.CASH_OUT) profit = (manualProfit || 0) - bet.stake;
-        else if (newStatus === BetStatus.CANCELLED || newStatus === BetStatus.REFUNDED) profit = 0;
+        const profit = calculateProfit(newStatus, bet.odds, bet.stake, manualProfit);
         return { ...bet, status: newStatus, profit };
       }
       return bet;
@@ -283,6 +279,34 @@ const App: React.FC = () => {
     showToast('Operación eliminada', 'error');
     updateLastSaved();
   }, [showToast, updateLastSaved]);
+
+  const handleExportBackup = useCallback(() => {
+    downloadBackup({ bets, bankrolls, bookmakers });
+    showToast('Copia de seguridad descargada');
+  }, [bets, bankrolls, bookmakers, showToast]);
+
+  // Lee el archivo y, si es válido, pide confirmación antes de reemplazar los datos
+  const handleImportBackupFile = useCallback(async (file: File) => {
+    const result = parseBackup(await file.text());
+    if (result.ok) {
+      setPendingRestore(result.data);
+    } else {
+      showToast(result.error, 'error');
+    }
+  }, [showToast]);
+
+  const confirmRestore = useCallback(() => {
+    if (!pendingRestore) return;
+    setBets(pendingRestore.bets);
+    setBankrolls(pendingRestore.bankrolls);
+    if (pendingRestore.bookmakers && pendingRestore.bookmakers.length > 0) {
+      setBookmakers(pendingRestore.bookmakers);
+    }
+    setActiveBankrollId('all');
+    setPendingRestore(null);
+    showToast(`Datos restaurados: ${pendingRestore.bets.length} apuestas`);
+    updateLastSaved();
+  }, [pendingRestore, showToast, updateLastSaved]);
 
   const handleLogout = useCallback(() => {
     setIsLogoutConfirmOpen(true);
@@ -426,7 +450,7 @@ const App: React.FC = () => {
 
                 <div className="mt-2 px-4 pb-2 flex items-center justify-between">
                    <span className="text-[8px] font-black text-emerald-500 uppercase tracking-tighter flex items-center gap-1">
-                      <CheckCircle2 className="w-2 h-2" /> Sincronizado
+                      <CheckCircle2 className="w-2 h-2" /> Guardado en este dispositivo
                    </span>
                    <span className="text-[8px] font-bold text-slate-600 italic">{lastSaved}</span>
                 </div>
@@ -464,9 +488,9 @@ const App: React.FC = () => {
           <div className="max-w-6xl mx-auto">
             <Routes>
               <Route path="/" element={<Dashboard stats={stats} bets={filteredBets} userName={user?.name} onProfileClick={() => setIsProfileModalOpen(true)} />} />
-              <Route path="/bets" element={<BetList bets={filteredBets} activeBankrollName={activeBankrollName} onDelete={handleDeleteBet} onUpdateStatus={handleUpdateStatus} onEdit={handleEdit} />} />
+              <Route path="/bets" element={<BetList bets={filteredBets} allBets={bets} bankrolls={bankrolls} activeBankrollName={activeBankrollName} onExportBackup={handleExportBackup} onImportBackup={handleImportBackupFile} onDelete={handleDeleteBet} onUpdateStatus={handleUpdateStatus} onEdit={handleEdit} />} />
               <Route path="/statistics" element={<Statistics bets={filteredBets} stats={stats} bankrolls={bankrolls} activeBankrollId={activeBankrollId} onSelectBankroll={handleSetActiveBankroll} />} />
-              <Route path="/bankrolls" element={<BankrollManager bankrolls={bankrolls} bets={bets} onUpdate={setBankrolls} activeBankrollId={activeBankrollId} onSelect={handleSetActiveBankroll} />} />
+              <Route path="/bankrolls" element={<BankrollManager bankrolls={bankrolls} bets={bets} onUpdate={setBankrolls} activeBankrollId={activeBankrollId} onSelect={handleSetActiveBankroll} onExportBackup={handleExportBackup} onImportBackup={handleImportBackupFile} />} />
               <Route path="/bookmakers" element={<BookmakerManager bookmakers={bookmakers} onUpdate={setBookmakers} />} />
               <Route path="/auth" element={<Auth onLogin={setUser} />} />
             </Routes>
@@ -493,7 +517,17 @@ const App: React.FC = () => {
           />
         )}
 
-        <ConfirmModal 
+        <ConfirmModal
+          isOpen={pendingRestore !== null}
+          title="Restaurar copia de seguridad"
+          message={pendingRestore ? `Se restaurarán ${describeBackup(pendingRestore)}. Esto reemplazará todos tus datos actuales y no se puede deshacer.` : ''}
+          onConfirm={confirmRestore}
+          onCancel={() => setPendingRestore(null)}
+          confirmText="Reemplazar datos"
+          type="danger"
+        />
+
+        <ConfirmModal
           isOpen={isLogoutConfirmOpen}
           title="Cerrar Sesión"
           message="¿Estás seguro de que deseas cerrar la sesión de seguridad? Deberás volver a autenticarte para acceder a tus datos."
@@ -515,6 +549,15 @@ const App: React.FC = () => {
       </div>
     </Router>
   );
+};
+
+const plural = (n: number, singular: string, pluralForm: string) => `${n} ${n === 1 ? singular : pluralForm}`;
+
+// "12 apuestas, 1 bankroll y 33 casas de apuestas"
+const describeBackup = (data: BackupData): string => {
+  const parts = [plural(data.bets.length, 'apuesta', 'apuestas'), plural(data.bankrolls.length, 'bankroll', 'bankrolls')];
+  if (data.bookmakers) parts.push(plural(data.bookmakers.length, 'casa de apuestas', 'casas de apuestas'));
+  return parts.slice(0, -1).join(', ') + ' y ' + parts[parts.length - 1];
 };
 
 const NavLink: React.FC<{ to: string, icon: React.ReactNode, label: string }> = ({ to, icon, label }) => {

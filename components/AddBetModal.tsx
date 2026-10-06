@@ -1,7 +1,8 @@
 
 import React, { useState, useRef } from 'react';
 import { Bet, BetStatus, Sport, Bankroll, Bookmaker } from '../types';
-import { Camera, Loader2, X, Banknote } from 'lucide-react';
+import { Camera, Loader2, X, Banknote, AlertTriangle } from 'lucide-react';
+import { parseDecimal, validateBetForm } from '../src/utils/betMath';
 
 interface AddBetModalProps {
   bankrolls: Bankroll[];
@@ -32,6 +33,8 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
   const enabledBookmakers = bookmakers.filter(b => b.enabled);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isExtracting, setIsExtracting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [extractError, setExtractError] = useState<string | null>(null);
 
   const [inputOdds, setInputOdds] = useState(initialData ? initialData.odds.toString() : '1.80');
   const [inputStake, setInputStake] = useState(initialData ? initialData.stake.toString() : '10');
@@ -63,6 +66,7 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
     if (!file) return;
 
     setIsExtracting(true);
+    setExtractError(null);
     try {
       const base64 = await new Promise<string>((resolve) => {
         const reader = new FileReader();
@@ -105,9 +109,9 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
       }
       
       setFormData(updatedData);
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error extracting from image:", error);
-      alert(error.message || "No se pudo extraer la información de la imagen. Por favor, inténtalo de nuevo o rellena manualmente.");
+      setExtractError(error instanceof Error && error.message ? error.message : "No se pudo extraer la información de la imagen. Inténtalo de nuevo o rellena los datos a mano.");
     } finally {
       setIsExtracting(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -116,11 +120,25 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const error = validateBetForm({
+      date: formData.date,
+      bookmaker: formData.bookmaker,
+      status: formData.status,
+      odds: inputOdds,
+      stake: inputStake,
+      cashOutAmount: inputManualProfit,
+    });
+    if (error) {
+      setFormError(error);
+      return;
+    }
+    setFormError(null);
     onSubmit({
       ...formData,
-      odds: parseFloat(inputOdds.replace(',', '.')),
-      stake: parseFloat(inputStake.replace(',', '.')),
-      manualProfit: formData.status === BetStatus.CASH_OUT ? parseFloat(inputManualProfit.replace(',', '.')) : undefined
+      bookmaker: formData.bookmaker.trim(),
+      odds: parseDecimal(inputOdds),
+      stake: parseDecimal(inputStake),
+      manualProfit: formData.status === BetStatus.CASH_OUT ? parseDecimal(inputManualProfit) : undefined
     });
   };
 
@@ -166,6 +184,11 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
                   </>
                 )}
               </button>
+              {extractError && (
+                <p role="alert" className="mt-3 text-[#e2001a] text-[10px] font-black uppercase text-center bg-red-500/10 py-3 px-4 rounded-xl border border-red-500/20 flex items-center justify-center gap-2">
+                  <AlertTriangle size={14} className="shrink-0" />{extractError}
+                </p>
+              )}
             </div>
           )}
 
@@ -280,6 +303,12 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
                 </div>
             )}
           </div>
+
+          {formError && (
+            <p role="alert" className="text-[#e2001a] text-[10px] font-black uppercase text-center bg-red-500/10 py-3 px-4 rounded-xl border border-red-500/20 flex items-center justify-center gap-2">
+              <AlertTriangle size={14} className="shrink-0" />{formError}
+            </p>
+          )}
 
           <button type="submit" className="w-full py-6 bg-gradient-to-r from-[#e2001a] to-[#920011] rounded-2xl text-xs font-black text-white shadow-2xl shadow-red-900/40 hover:scale-[1.02] active:scale-[0.98] transition-all uppercase tracking-[0.2em]">
             {initialData ? 'GUARDAR ACTUALIZACIÓN' : 'REGISTRAR OPERACIÓN'}

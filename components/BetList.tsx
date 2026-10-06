@@ -1,17 +1,24 @@
-import React, { useState, useMemo, useCallback } from 'react';
-import { Bet, BetStatus } from '../types';
+import React, { useState, useMemo, useCallback, useRef } from 'react';
+import { Bet, BetStatus, Bankroll } from '../types';
 import { getSportIcon } from '../src/utils/icons';
+import { calculateYield } from '../src/utils/betMath';
+import { downloadBetsCsv } from '../src/utils/exportCsv';
 import { getBookmakerBrand } from '../src/utils/bookmakers';
 import { renderBookmakerName } from '../src/utils/bookmakerStyles';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Filter, Columns, ChevronDown, Trash2, Edit3, Check, X, AlertTriangle, Calendar, Activity } from 'lucide-react';
+import { Search, Filter, Columns, ChevronDown, Trash2, Edit3, Check, X, AlertTriangle, Calendar, Activity, Download, FileSpreadsheet, DatabaseBackup, FileUp } from 'lucide-react';
 
 interface BetListProps {
   bets: Bet[];
+  /** Todas las apuestas, sin filtrar por bankroll (para la exportación completa) */
+  allBets: Bet[];
+  bankrolls: Bankroll[];
   activeBankrollName: string;
   onDelete: (id: string) => void;
   onUpdateStatus: (id: string, status: BetStatus, profit?: number) => void;
   onEdit: (bet: Bet) => void;
+  onExportBackup: () => void;
+  onImportBackup: (file: File) => void;
 }
 
 const formatStatusText = (status: BetStatus): string => {
@@ -214,7 +221,9 @@ const BetRow: React.FC<BetRowProps> = React.memo(({ bet, visibleColumns, onUpdat
   );
 });
 
-const BetList: React.FC<BetListProps> = ({ bets, activeBankrollName, onDelete, onUpdateStatus, onEdit }) => {
+const BetList: React.FC<BetListProps> = ({ bets, allBets, bankrolls, activeBankrollName, onDelete, onUpdateStatus, onEdit, onExportBackup, onImportBackup }) => {
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [bookmakerFilter, setBookmakerFilter] = useState<string>('ALL');
   const [grouping, setGrouping] = useState<'NONE' | 'DAY' | 'WEEK' | 'MONTH' | 'YEAR'>('MONTH');
@@ -253,7 +262,7 @@ const BetList: React.FC<BetListProps> = ({ bets, activeBankrollName, onDelete, o
     const stake = closed.reduce((acc, b) => acc + b.stake, 0);
     return {
       profit,
-      yield: stake > 0 ? (profit / stake) * 100 : 0,
+      yield: calculateYield(profit, stake),
       count: filteredBets.length
     };
   }, [filteredBets]);
@@ -300,6 +309,27 @@ const BetList: React.FC<BetListProps> = ({ bets, activeBankrollName, onDelete, o
       [groupName]: !prev[groupName]
     }));
   }, []);
+
+  const handleExportCsv = useCallback(() => {
+    const today = new Date().toISOString().split('T')[0];
+    const safeName = activeBankrollName.replace(/[^\p{L}\p{N}]+/gu, '_');
+    downloadBetsCsv(filteredBets, bankrolls, `BetTrack_${safeName}_${today}.csv`);
+    setShowExportMenu(false);
+  }, [filteredBets, bankrolls, activeBankrollName]);
+
+  const handleExportAllCsv = useCallback(() => {
+    const today = new Date().toISOString().split('T')[0];
+    downloadBetsCsv(allBets, bankrolls, `BetTrack_Todas_${today}.csv`);
+    setShowExportMenu(false);
+  }, [allBets, bankrolls]);
+
+  const handleImportChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) onImportBackup(file);
+    // Permite volver a elegir el mismo archivo
+    e.target.value = '';
+    setShowExportMenu(false);
+  }, [onImportBackup]);
 
   const toggleAllGroups = useCallback(() => {
     const allGroups = Object.keys(groupedBets);
@@ -446,6 +476,66 @@ const BetList: React.FC<BetListProps> = ({ bets, activeBankrollName, onDelete, o
                     )}
                   </AnimatePresence>
                 </div>
+
+                <div className="relative flex-1 sm:flex-none">
+                  <button
+                    onClick={() => setShowExportMenu(!showExportMenu)}
+                    className="w-full bg-zinc-950 border border-white/5 rounded-2xl px-4 py-3.5 text-xs font-bold text-slate-400 hover:text-white hover:border-white/20 transition-all shadow-inner flex items-center justify-center gap-2"
+                    aria-haspopup="menu"
+                    aria-expanded={showExportMenu}
+                  >
+                    <Download size={14} />
+                    <span>Exportar</span>
+                    <ChevronDown size={12} className={`transition-transform ${showExportMenu ? 'rotate-180' : ''}`} />
+                  </button>
+                  <input type="file" ref={importInputRef} className="hidden" accept=".json,application/json" onChange={handleImportChange} />
+
+                  <AnimatePresence>
+                    {showExportMenu && (
+                      <>
+                        {/* Capa invisible para cerrar el menú al pulsar fuera */}
+                        <div className="fixed inset-0 z-40" onClick={() => setShowExportMenu(false)} />
+                        <motion.div
+                          role="menu"
+                          initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                          className="absolute right-0 mt-2 w-72 bg-zinc-950 border border-white/10 rounded-2xl p-2 shadow-2xl z-50"
+                        >
+                          <p className="px-3 pt-2 pb-1 text-[9px] font-black text-slate-600 uppercase tracking-widest">Excel</p>
+                          <ExportMenuItem
+                            icon={<FileSpreadsheet size={16} />}
+                            title="Apuestas filtradas"
+                            subtitle={`${filteredBets.length} apuestas de la vista actual`}
+                            onClick={handleExportCsv}
+                            disabled={filteredBets.length === 0}
+                          />
+                          <ExportMenuItem
+                            icon={<FileSpreadsheet size={16} />}
+                            title="Todas las apuestas"
+                            subtitle={`${allBets.length} apuestas de todos los bankrolls`}
+                            onClick={handleExportAllCsv}
+                            disabled={allBets.length === 0}
+                          />
+                          <div className="my-2 border-t border-white/5" />
+                          <p className="px-3 pt-1 pb-1 text-[9px] font-black text-slate-600 uppercase tracking-widest">Copia de seguridad</p>
+                          <ExportMenuItem
+                            icon={<DatabaseBackup size={16} />}
+                            title="Exportar todo"
+                            subtitle="Apuestas, bankrolls, casas y estadísticas"
+                            onClick={() => { onExportBackup(); setShowExportMenu(false); }}
+                          />
+                          <ExportMenuItem
+                            icon={<FileUp size={16} />}
+                            title="Importar copia"
+                            subtitle="Restaura tus datos desde un archivo .json"
+                            onClick={() => importInputRef.current?.click()}
+                          />
+                        </motion.div>
+                      </>
+                    )}
+                  </AnimatePresence>
+                </div>
               </div>
           </div>
         </div>
@@ -522,7 +612,7 @@ const BetList: React.FC<BetListProps> = ({ bets, activeBankrollName, onDelete, o
                       <div className="flex flex-col items-end">
                         <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest">Yield</span>
                         <span className={`text-sm md:text-sm font-black ${groupData.stake > 0 ? (groupData.profit >= 0 ? 'text-emerald-400' : 'text-[#e2001a]') : 'text-slate-500'}`}>
-                          {groupData.stake > 0 ? (groupData.profit / groupData.stake * 100).toFixed(1) : '0.0'}%
+                          {calculateYield(groupData.profit, groupData.stake).toFixed(1)}%
                         </span>
                       </div>
                       <div className="w-px h-6 md:h-8 bg-white/10"></div>
@@ -641,5 +731,20 @@ const BetList: React.FC<BetListProps> = ({ bets, activeBankrollName, onDelete, o
     </motion.div>
   );
 };
+
+const ExportMenuItem: React.FC<{ icon: React.ReactNode; title: string; subtitle: string; onClick: () => void; disabled?: boolean }> = ({ icon, title, subtitle, onClick, disabled }) => (
+  <button
+    role="menuitem"
+    onClick={onClick}
+    disabled={disabled}
+    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left hover:bg-white/5 transition-all disabled:opacity-30 disabled:pointer-events-none group"
+  >
+    <span className="w-8 h-8 shrink-0 rounded-lg bg-zinc-900 border border-white/5 flex items-center justify-center text-slate-400 group-hover:text-[#e2001a]">{icon}</span>
+    <span className="min-w-0">
+      <span className="block text-xs font-black text-white">{title}</span>
+      <span className="block text-[10px] font-bold text-slate-500 truncate">{subtitle}</span>
+    </span>
+  </button>
+);
 
 export default BetList;
