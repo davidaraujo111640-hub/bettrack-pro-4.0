@@ -1,5 +1,11 @@
 {
   "framework": "vite",
   "buildCommand": "vite build",
-  "outputDirectory": "dist"
+  "outputDirectory": "dist",
+  "functions": {
+    "api/extract-bet.ts": {
+      "memory": 1024,
+      "maxDuration": 30
+    }
+  }
 }
