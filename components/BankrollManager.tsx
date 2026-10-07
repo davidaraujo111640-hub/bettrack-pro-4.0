@@ -2,7 +2,7 @@
 import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bankroll, Bet, BetStatus } from '../types';
-import { calculateYield } from '../src/utils/betMath';
+import { calculateYield, realStake } from '../src/utils/betMath';
 import { 
   Archive, 
   PackageOpen, 
@@ -46,7 +46,7 @@ const BankrollManager: React.FC<BankrollManagerProps> = ({ bankrolls, bets, acti
       
     const closedBets = bankrollBets.filter(b => b.status !== BetStatus.PENDING);
     const profit = closedBets.reduce((acc, bet) => acc + (bet.profit || 0), 0);
-    const totalStake = closedBets.reduce((acc, bet) => acc + (bet.stake || 0), 0);
+    const totalStake = closedBets.reduce((acc, bet) => acc + (realStake(bet) || 0), 0);
     
     const initial = bankrollId === 'all' 
       ? activeBankrolls.reduce((acc, b) => acc + b.initialCapital, 0)

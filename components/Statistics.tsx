@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Bet, BankrollStats, BetStatus, Bankroll } from '../types';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid, AreaChart, Area, ReferenceLine } from 'recharts';
 import { buildEquityCurve } from '../src/utils/betMath';
+import BankrollStatsPanel from './BankrollStatsPanel';
 
 interface StatisticsProps {
   bets: Bet[];
@@ -272,68 +273,14 @@ const Statistics: React.FC<StatisticsProps> = ({ bets, stats, bankrolls, activeB
               </AreaChart>
             </ResponsiveContainer>
           </div>
-
-          {/* Drawdown: cuánto ha caído el bankroll desde su máximo */}
-          <div className="mt-10 pt-8 border-t border-white/5">
-            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6">
-              <div>
-                <h4 className="text-sm md:text-base font-black text-white uppercase italic">Drawdown</h4>
-                <p className="text-[10px] font-bold text-slate-500 mt-1">Caída del bankroll desde el máximo alcanzado hasta ese momento.</p>
-              </div>
-              <div className="grid grid-cols-3 gap-3 sm:gap-6">
-                <div className="flex flex-col" title="Saldo más alto que ha alcanzado el bankroll">
-                  <span className="text-zinc-600 text-[8px] md:text-[9px] font-black uppercase tracking-tighter">Máximo</span>
-                  <span className="text-sm md:text-lg font-black text-white">{equity.peak.toFixed(2)}€</span>
-                </div>
-                <div className="flex flex-col" title="La mayor caída desde un máximo">
-                  <span className="text-zinc-600 text-[8px] md:text-[9px] font-black uppercase tracking-tighter">DD máximo</span>
-                  <span className={`text-sm md:text-lg font-black ${equity.maxDrawdown < 0 ? 'text-[#e2001a]' : 'text-emerald-400'}`}>
-                    {equity.maxDrawdown.toFixed(2)}€
-                    <span className="text-[10px] md:text-xs ml-1 opacity-70">({equity.maxDrawdownPct.toFixed(1)}%)</span>
-                  </span>
-                </div>
-                <div className="flex flex-col" title="Lo que falta para volver al máximo">
-                  <span className="text-zinc-600 text-[8px] md:text-[9px] font-black uppercase tracking-tighter">DD actual</span>
-                  <span className={`text-sm md:text-lg font-black ${equity.currentDrawdown < 0 ? 'text-[#e2001a]' : 'text-emerald-400'}`}>
-                    {equity.currentDrawdown.toFixed(2)}€
-                    <span className="text-[10px] md:text-xs ml-1 opacity-70">({equity.currentDrawdownPct.toFixed(1)}%)</span>
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="h-32 md:h-40 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={bankrollEvolution}>
-                  <CartesianGrid strokeDasharray="8 8" stroke="#ffffff03" vertical={false} />
-                  <XAxis dataKey="name" hide />
-                  <YAxis
-                    stroke="#525252"
-                    fontSize={10}
-                    tickLine={false}
-                    axisLine={false}
-                    fontWeight="800"
-                    tickFormatter={(value) => `${value}€`}
-                    domain={['auto', 0]}
-                  />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Area
-                    type="stepAfter"
-                    dataKey="drawdown"
-                    name="Drawdown"
-                    stroke="#e2001a"
-                    strokeWidth={2}
-                    fill="#e2001a"
-                    fillOpacity={0.25}
-                    baseValue={0}
-                    isAnimationActive={false}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
         </div>
       </div>
+
+      <BankrollStatsPanel
+        bets={bets}
+        initialCapital={stats.initialBankroll}
+        bankrollName={activeBankrollId === 'all' ? 'Global' : bankrolls.find(b => b.id === activeBankrollId)?.name ?? 'Bankroll'}
+      />
     </div>
   );
 };

@@ -52,3 +52,32 @@ html {
     scroll-behavior: smooth;
     -webkit-tap-highlight-color: transparent;
 }
+
+/* Símbolo de BetTrack animado: la línea se dibuja subiendo y la punta aparece al final */
+.bt-logo .bt-logo-line {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: bt-logo-draw 0.9s cubic-bezier(0.65, 0, 0.35, 1) 0.15s forwards;
+}
+.bt-logo .bt-logo-head {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: bt-logo-draw 0.35s ease-out 0.95s forwards;
+}
+.bt-logo {
+    animation: bt-logo-pop 0.45s ease-out 1.2s;
+    transform-origin: 50% 50%;
+}
+@keyframes bt-logo-draw {
+    to { stroke-dashoffset: 0; }
+}
+@keyframes bt-logo-pop {
+    0% { transform: translate(0, 0); }
+    40% { transform: translate(1.5px, -1.5px) scale(1.12); }
+    100% { transform: translate(0, 0) scale(1); }
+}
+/* Fuera de Resumen el símbolo se muestra ya dibujado, sin animación */
+.bt-logo.bt-logo--static, .bt-logo.bt-logo--static .bt-logo-line, .bt-logo.bt-logo--static .bt-logo-head { animation: none; stroke-dashoffset: 0; }
+@media (prefers-reduced-motion: reduce) {
+    .bt-logo, .bt-logo .bt-logo-line, .bt-logo .bt-logo-head { animation: none; stroke-dashoffset: 0; }
+}

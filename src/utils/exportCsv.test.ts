@@ -21,8 +21,8 @@ const bet = (overrides: Partial<Bet>): Bet => ({
 describe('betsToCsv', () => {
   it('genera cabecera y filas con ; y decimales con coma', () => {
     const lines = betsToCsv([bet({})], bankrolls).split('\r\n');
-    expect(lines[0]).toBe('Fecha;Bankroll;Casa;Deporte;Descripción;Cuota;Importe;Estado;Beneficio');
-    expect(lines[1]).toBe('2026-10-01;Principal;Bet365;Fútbol;Real Madrid gana;1,85;10,00;Ganada;8,50');
+    expect(lines[0]).toBe('Fecha;Bankroll;Casa;Deporte;Descripción;Cuota;Importe;Freebet;Estado;Beneficio');
+    expect(lines[1]).toBe('2026-10-01;Principal;Bet365;Fútbol;Real Madrid gana;1,85;10,00;No;Ganada;8,50');
   });
 
   it('ordena por fecha ascendente', () => {

@@ -11,9 +11,13 @@ import Auth from './components/Auth';
 import Toast from './components/Toast';
 import ConfirmModal from './components/ConfirmModal';
 import ProfileModal from './components/ProfileModal';
+import AnimatedLogo from './components/AnimatedLogo';
+import UpdatePrompt from './components/UpdatePrompt';
+import UserBadge from './components/UserBadge';
 import { Bet, BetStatus, BankrollStats, Bankroll, User, Bookmaker } from './types';
 import { getBookmakerIcon } from './src/utils/bookmakers';
-import { calculateProfit, calculateRoi, calculateYield } from './src/utils/betMath';
+import { isCustomBookmakerIcon } from './src/utils/bookmakerIcons';
+import { calculateProfit, calculateRoi, calculateYield, realStake } from './src/utils/betMath';
 import { BackupData, downloadBackup, parseBackup } from './src/utils/backup';
 import { 
   Home, 
@@ -23,14 +27,14 @@ import {
   Zap, 
   Landmark, 
   Globe, 
-  ShieldCheck, 
   LogOut, 
   ChevronDown, 
   CheckCircle2, 
   PlusCircle, 
-  Plus, 
-  TrendingUp
+  Plus
 } from 'lucide-react';
+
+const REMOVED_BOOKMAKER_IDS = new Set(['wanabet']);
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(() => {
@@ -85,9 +89,26 @@ const App: React.FC = () => {
       { id: 'sportium', name: 'Sportium', icon: getBookmakerIcon('Sportium'), enabled: true },
       { id: 'tonybet', name: 'TonyBet', icon: getBookmakerIcon('TonyBet'), enabled: true },
       { id: 'versus', name: 'Versus', icon: getBookmakerIcon('Versus'), enabled: true },
-      { id: 'wanabet', name: 'Wanabet', icon: getBookmakerIcon('Wanabet'), enabled: true },
       { id: 'williamhill', name: 'William Hill', icon: getBookmakerIcon('William Hill'), enabled: true },
       { id: 'winamax', name: 'Winamax', icon: getBookmakerIcon('Winamax'), enabled: true },
+      { id: '1xbet', name: '1xBet', icon: getBookmakerIcon('1xBet'), enabled: true },
+      { id: 'aupabet', name: 'Aupabet', icon: getBookmakerIcon('Aupabet'), enabled: true },
+      { id: 'betfred', name: 'Betfred', icon: getBookmakerIcon('Betfred'), enabled: true },
+      { id: 'betinia', name: 'Betinia', icon: getBookmakerIcon('Betinia'), enabled: true },
+      { id: 'casinogranvia', name: 'Casino Gran Vía', icon: getBookmakerIcon('Casino Gran Vía'), enabled: true },
+      { id: 'casumo', name: 'Casumo', icon: getBookmakerIcon('Casumo'), enabled: true },
+      { id: 'dafabet', name: 'Dafabet', icon: getBookmakerIcon('Dafabet'), enabled: true },
+      { id: 'daznbet', name: 'DAZN Bet', icon: getBookmakerIcon('DAZN Bet'), enabled: true },
+      { id: 'juegging', name: 'Juegging', icon: getBookmakerIcon('Juegging'), enabled: true },
+      { id: 'speedybet', name: 'Speedybet', icon: getBookmakerIcon('Speedybet'), enabled: true },
+      { id: 'yaasscasino', name: 'Yaass Casino', icon: getBookmakerIcon('Yaass Casino'), enabled: true },
+      { id: 'yosports', name: 'YoSports', icon: getBookmakerIcon('YoSports'), enabled: true },
+      { id: 'zebet', name: 'ZEbet', icon: getBookmakerIcon('ZEbet'), enabled: true },
+      { id: 'zeturf', name: 'ZEturf', icon: getBookmakerIcon('ZEturf'), enabled: true },
+      { id: 'botemania', name: 'Botemanía', icon: getBookmakerIcon('Botemanía'), enabled: true },
+      { id: 'goldenbull', name: 'Golden Bull', icon: getBookmakerIcon('Golden Bull'), enabled: true },
+      { id: 'monopolycasino', name: 'Monopoly Casino', icon: getBookmakerIcon('Monopoly Casino'), enabled: true },
+      { id: 'solcasino', name: 'Sol Casino', icon: getBookmakerIcon('Sol Casino'), enabled: true },
     ].sort((a, b) => a.name.localeCompare(b.name));
 
     try {
@@ -107,8 +128,11 @@ const App: React.FC = () => {
         const seenNames = new Set<string>();
         
         savedList.forEach((b: Bookmaker) => {
+          // Casas que se han retirado de la lista y no deben volver a aparecer
+          if (b && REMOVED_BOOKMAKER_IDS.has(b.id)) return;
           if (b && b.name && !seenNames.has(b.name.toLowerCase())) {
-            const isCustomIcon = b.icon && b.icon.startsWith('data:image');
+            // Las imágenes subidas por el usuario se respetan; el resto se regeneran
+            const isCustomIcon = isCustomBookmakerIcon(b.icon);
             let updatedBookmaker = b as Bookmaker;
             
             if (!isCustomIcon) {
@@ -189,7 +213,7 @@ const App: React.FC = () => {
   const stats = useMemo<BankrollStats>(() => {
     const closedBets = filteredBets.filter(b => b.status !== BetStatus.PENDING);
     const totalProfit = closedBets.reduce((acc, b) => acc + b.profit, 0);
-    const totalStake = closedBets.reduce((acc, b) => acc + b.stake, 0);
+    const totalStake = closedBets.reduce((acc, b) => acc + realStake(b), 0);
     const wonBets = closedBets.filter(b => b.status === BetStatus.WON || (b.status === BetStatus.CASH_OUT && b.profit > 0)).length;
     
     const initialCap = activeBankrollId === 'all' 
@@ -210,7 +234,7 @@ const App: React.FC = () => {
 
   const handleAddBet = useCallback((newBet: Omit<Bet, 'id' | 'profit'> & { manualProfit?: number }) => {
     const { manualProfit, ...betData } = newBet;
-    const profit = calculateProfit(betData.status, betData.odds, betData.stake, manualProfit);
+    const profit = calculateProfit(betData.status, betData.odds, betData.stake, manualProfit, betData.freebet);
 
     // Ensure the bankroll exists
     const bankrollExists = bankrolls.some(b => b.id === newBet.bankrollId);
@@ -251,7 +275,7 @@ const App: React.FC = () => {
   const handleUpdateStatus = useCallback((id: string, newStatus: BetStatus, manualProfit?: number) => {
     setBets(prevBets => prevBets.map(bet => {
       if (bet.id === id) {
-        const profit = calculateProfit(newStatus, bet.odds, bet.stake, manualProfit);
+        const profit = calculateProfit(newStatus, bet.odds, bet.stake, manualProfit, bet.freebet);
         return { ...bet, status: newStatus, profit };
       }
       return bet;
@@ -345,6 +369,13 @@ const App: React.FC = () => {
     });
   }, [showToast]);
 
+  // Las 4 casas con más apuestas registradas, para el selector de casa
+  const recentBookmakers = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const b of bets) if (b.bookmaker) counts.set(b.bookmaker, (counts.get(b.bookmaker) ?? 0) + 1);
+    return [...counts.entries()].sort((x, y) => y[1] - x[1]).slice(0, 4).map(([name]) => name);
+  }, [bets]);
+
   const activeBankrollName = useMemo(() => {
     if (activeBankrollId === 'all') return 'Global';
     return bankrolls.find(b => b.id === activeBankrollId)?.name || 'Bankroll';
@@ -361,7 +392,7 @@ const App: React.FC = () => {
         <nav className="hidden md:flex w-72 glass-panel rounded-[2rem] p-8 flex-col gap-8 shadow-2xl border-white/5">
           <div className="flex items-center gap-4">
             <div className="bg-[#e2001a] p-3 rounded-2xl">
-              <TrendingUp className="text-white w-5 h-5" />
+              <AnimatedLogo className="text-white w-5 h-5" />
             </div>
             <div>
               <h1 className="text-xl font-black tracking-tighter leading-none text-white">BETTRACK</h1>
@@ -375,7 +406,7 @@ const App: React.FC = () => {
                 className="w-full flex items-center gap-3 hover:bg-white/5 p-2 rounded-xl transition-all group"
              >
                 <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-[#e2001a] border border-white/5 group-hover:bg-[#e2001a] group-hover:text-white transition-all">
-                    <ShieldCheck className="w-5 h-5" />
+                    <UserBadge plan={user.plan} size={20} />
                 </div>
                 <div className="min-w-0 text-left">
                     <p className="text-xs font-black text-white truncate">{user.name}</p>
@@ -487,8 +518,8 @@ const App: React.FC = () => {
         <main className="flex-1 overflow-y-auto pb-24 md:pb-0 px-4 pt-6 md:p-0">
           <div className="max-w-6xl mx-auto">
             <Routes>
-              <Route path="/" element={<Dashboard stats={stats} bets={filteredBets} userName={user?.name} onProfileClick={() => setIsProfileModalOpen(true)} />} />
-              <Route path="/bets" element={<BetList bets={filteredBets} allBets={bets} bankrolls={bankrolls} activeBankrollName={activeBankrollName} onExportBackup={handleExportBackup} onImportBackup={handleImportBackupFile} onDelete={handleDeleteBet} onUpdateStatus={handleUpdateStatus} onEdit={handleEdit} />} />
+              <Route path="/" element={<Dashboard stats={stats} bets={filteredBets} userName={user?.name} userPlan={user?.plan} onProfileClick={() => setIsProfileModalOpen(true)} />} />
+              <Route path="/bets" element={<BetList bets={filteredBets} allBets={bets} bookmakers={bookmakers} bankrolls={bankrolls} activeBankrollName={activeBankrollName} onDelete={handleDeleteBet} onUpdateStatus={handleUpdateStatus} onEdit={handleEdit} />} />
               <Route path="/statistics" element={<Statistics bets={filteredBets} stats={stats} bankrolls={bankrolls} activeBankrollId={activeBankrollId} onSelectBankroll={handleSetActiveBankroll} />} />
               <Route path="/bankrolls" element={<BankrollManager bankrolls={bankrolls} bets={bets} onUpdate={setBankrolls} activeBankrollId={activeBankrollId} onSelect={handleSetActiveBankroll} onExportBackup={handleExportBackup} onImportBackup={handleImportBackupFile} />} />
               <Route path="/bookmakers" element={<BookmakerManager bookmakers={bookmakers} onUpdate={setBookmakers} />} />
@@ -506,8 +537,11 @@ const App: React.FC = () => {
             onClose={() => { setIsAddModalOpen(false); setEditingBet(null); }} 
             onSubmit={handleAddBet}
             initialData={editingBet || undefined}
+            recentBookmakers={recentBookmakers}
           />
         )}
+
+        <UpdatePrompt />
 
         {toast && (
           <Toast 

@@ -3,13 +3,17 @@ import React, { useMemo, useState } from 'react';
 import { BankrollStats, Bet, BetStatus } from '../types';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine } from 'recharts';
 import { getSportIcon } from '../src/utils/icons';
+import UserBadge from './UserBadge';
+import AnimatedLogo from './AnimatedLogo';
+import { User } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
-import { TrendingUp, TrendingDown, ShieldCheck, Trophy, Target, Activity, Zap, Clock } from 'lucide-react';
+import { TrendingUp, TrendingDown, ShieldCheck, Check, X, Activity, Zap, Clock } from 'lucide-react';
 
 interface DashboardProps {
   stats: BankrollStats;
   bets: Bet[];
   userName?: string;
+  userPlan?: User['plan'];
   onProfileClick?: () => void;
 }
 
@@ -39,7 +43,7 @@ const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
   return null;
 };
 
-const Dashboard: React.FC<DashboardProps> = ({ stats, bets, userName, onProfileClick }) => {
+const Dashboard: React.FC<DashboardProps> = ({ stats, bets, userName, userPlan, onProfileClick }) => {
   const [chartPeriod, setChartPeriod] = useState<'WEEK' | 'MONTH' | 'YEAR' | 'ALL'>('ALL');
 
   const periods: { id: 'WEEK' | 'MONTH' | 'YEAR' | 'ALL'; label: string }[] = [
@@ -140,16 +144,22 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, bets, userName, onProfileC
           className="w-full sm:w-auto"
         >
             <div className="flex items-center justify-between sm:justify-start w-full gap-4">
-              <span className="text-[#e2001a] font-black text-[10px] uppercase tracking-[0.4em] flex items-center gap-2">
-                <Activity size={12} /> CENTRAL DE OPERACIONES
-              </span>
+              <div className="flex items-center gap-3">
+                {/* Logo animado (en móvil no hay barra lateral, que es donde está en escritorio) */}
+                <div className="md:hidden bg-[#e2001a] p-2.5 rounded-xl shadow-lg shadow-red-900/40 shrink-0">
+                  <AnimatedLogo className="text-white w-5 h-5" />
+                </div>
+                <span className="text-[#e2001a] font-black text-[10px] uppercase tracking-[0.4em] flex items-center gap-2">
+                  <Activity size={12} className="hidden md:block" /> CENTRAL DE OPERACIONES
+                </span>
+              </div>
               
               {/* Profile Icon Mobile (Only visible in Dashboard/Home per user request) */}
               <button 
                 onClick={onProfileClick}
                 className="md:hidden w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10 transition-all border border-white/5 active:scale-90"
               >
-                <ShieldCheck size={20} />
+                <UserBadge plan={userPlan} size={20} />
               </button>
             </div>
             <h2 className="text-3xl md:text-4xl font-black tracking-tighter text-white mt-1">Hola, <span className="text-[#ffcc00]">{userName || 'Usuario'}</span></h2>
@@ -171,10 +181,10 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, bets, userName, onProfileC
 
                     if (bet.status === BetStatus.WON) {
                         colorClass = 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.2)]';
-                        icon = <Trophy size={14} />;
+                        icon = <Check size={16} strokeWidth={3} />;
                     } else if (bet.status === BetStatus.LOST) {
                         colorClass = 'bg-red-500/10 border-red-500/30 text-red-500 shadow-[0_0_10px_rgba(239,68,68,0.2)]';
-                        icon = <Target size={14} />;
+                        icon = <X size={16} strokeWidth={3} />;
                     } else if (bet.status === BetStatus.REFUNDED) {
                         colorClass = 'bg-blue-500/10 border-blue-500/30 text-blue-400';
                         icon = <Activity size={14} />;

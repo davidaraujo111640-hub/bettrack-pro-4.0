@@ -1,7 +1,8 @@
 
 import React from 'react';
 import { Bookmaker } from '../types';
-import { getBookmakerIcon, getFallbackIcon, getBookmakerBrand } from '../src/utils/bookmakers';
+import { getBookmakerIcon } from '../src/utils/bookmakers';
+import { BookmakerLogo } from '../src/utils/bookmakerIcons';
 import { renderBookmakerName } from '../src/utils/bookmakerStyles';
 import { Plus, Camera, Check, Power } from 'lucide-react';
 
@@ -137,16 +138,7 @@ const BookmakerManager: React.FC<BookmakerManagerProps> = ({ bookmakers, onUpdat
             <div className="flex items-center gap-4">
               <div className="relative group/icon">
                 <div className="w-14 h-14 rounded-2xl flex items-center justify-center overflow-hidden shadow-xl bg-white/5">
-                  <img 
-                    src={bookmaker.icon} 
-                    alt={bookmaker.name} 
-                    className="w-full h-full object-contain p-2"
-                    style={{ filter: getBookmakerBrand(bookmaker.name).logoFilter }}
-                    referrerPolicy="no-referrer"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = getFallbackIcon(bookmaker.name);
-                    }}
-                  />
+                  <BookmakerLogo name={bookmaker.name} icon={bookmaker.icon} className="w-full h-full" />
                 </div>
                 <label className="absolute inset-0 bg-black/60 opacity-0 group-hover/icon:opacity-100 transition-opacity flex items-center justify-center cursor-pointer rounded-2xl">
                   <Camera className="w-4 h-4 text-white" />

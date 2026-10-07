@@ -1,5 +1,5 @@
 import { Bet, BetStatus, Bankroll, Bookmaker } from '../../types';
-import { calculateRoi, calculateYield, round2 } from './betMath';
+import { calculateRoi, calculateYield, round2, realStake } from './betMath';
 
 export const BACKUP_VERSION = 2;
 
@@ -23,7 +23,7 @@ interface StatsSummary {
 function summarize(bets: Bet[], initialCapital: number): StatsSummary {
   const closed = bets.filter(b => b.status !== BetStatus.PENDING);
   const profit = round2(closed.reduce((acc, b) => acc + b.profit, 0));
-  const staked = round2(closed.reduce((acc, b) => acc + b.stake, 0));
+  const staked = round2(closed.reduce((acc, b) => acc + realStake(b), 0));
   const won = closed.filter(b => b.status === BetStatus.WON || (b.status === BetStatus.CASH_OUT && b.profit > 0)).length;
   return {
     apuestas: bets.length,
@@ -92,6 +92,7 @@ function parseBet(raw: unknown): Bet | null {
     bookmaker: typeof raw.bookmaker === 'string' ? raw.bookmaker : '',
     sport: (typeof raw.sport === 'string' ? raw.sport : 'Otros') as Bet['sport'],
     description: typeof raw.description === 'string' ? raw.description : '',
+    ...(raw.freebet === true ? { freebet: true } : {}),
   };
 }
 

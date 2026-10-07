@@ -36,6 +36,8 @@ export interface Bet {
   status: BetStatus;
   profit: number;
   description: string;
+  /** Freebet (apuesta gratis): si se pierde no resta el importe; si se gana, solo cuenta la ganancia neta */
+  freebet?: boolean;
 }
 
 export interface Bookmaker {

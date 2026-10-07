@@ -3,6 +3,7 @@ import React, { useState, useRef } from 'react';
 import { Bet, BetStatus, Sport, Bankroll, Bookmaker } from '../types';
 import { Camera, Loader2, X, Banknote, AlertTriangle } from 'lucide-react';
 import { parseDecimal, validateBetForm } from '../src/utils/betMath';
+import BookmakerSelect from './BookmakerSelect';
 
 interface AddBetModalProps {
   bankrolls: Bankroll[];
@@ -11,6 +12,8 @@ interface AddBetModalProps {
   onClose: () => void;
   onSubmit: (bet: Omit<Bet, 'id' | 'profit'> & { manualProfit?: number }) => void;
   initialData?: Bet;
+  /** Casas más usadas, para mostrarlas arriba en el selector */
+  recentBookmakers?: string[];
 }
 
 const SPORTS: Sport[] = [
@@ -29,7 +32,7 @@ const SPORTS: Sport[] = [
   'Otros'
 ];
 
-const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, activeBankrollId, onClose, onSubmit, initialData }) => {
+const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, activeBankrollId, onClose, onSubmit, initialData, recentBookmakers }) => {
   const enabledBookmakers = bookmakers.filter(b => b.enabled);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isExtracting, setIsExtracting] = useState(false);
@@ -38,7 +41,7 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
 
   const [inputOdds, setInputOdds] = useState(initialData ? initialData.odds.toString() : '1.80');
   const [inputStake, setInputStake] = useState(initialData ? initialData.stake.toString() : '10');
-  const [inputManualProfit, setInputManualProfit] = useState(initialData ? (initialData.status === BetStatus.CASH_OUT ? (initialData.profit + initialData.stake) : initialData.profit || 0).toString() : '0');
+  const [inputManualProfit, setInputManualProfit] = useState(initialData ? (initialData.status === BetStatus.CASH_OUT ? (initialData.profit + (initialData.freebet ? 0 : initialData.stake)) : initialData.profit || 0).toString() : '0');
 
   const [formData, setFormData] = useState(() => {
     if (initialData) {
@@ -49,15 +52,18 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
         sport: initialData.sport,
         status: initialData.status,
         description: initialData.description,
+        freebet: !!initialData.freebet,
       };
     }
     return {
       date: new Date().toISOString().split('T')[0],
       bankrollId: activeBankrollId === 'all' ? (bankrolls.find(b => !b.archived)?.id || 'default') : activeBankrollId,
-      bookmaker: enabledBookmakers.length > 0 ? enabledBookmakers[0].name : 'Otros',
+      // Por defecto, la casa más usada (si sigue visible); si no, la primera de la lista
+      bookmaker: recentBookmakers?.find(n => enabledBookmakers.some(b => b.name === n)) ?? (enabledBookmakers.length > 0 ? enabledBookmakers[0].name : 'Otros'),
       sport: 'Fútbol' as Sport,
       status: BetStatus.PENDING,
       description: '',
+      freebet: false,
     };
   });
 
@@ -211,19 +217,12 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Casa de Apuestas</label>
-              <select 
-                className="w-full bg-zinc-900 border border-white/10 rounded-2xl px-4 py-4 text-sm font-bold text-white outline-none focus:border-[#e2001a]" 
-                value={enabledBookmakers.some(b => b.name === formData.bookmaker) ? formData.bookmaker : 'Otros'} 
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setFormData({...formData, bookmaker: val === 'Otros' ? '' : val});
-                }}
-              >
-                {enabledBookmakers.map(b => (
-                  <option key={b.id} value={b.name}>{b.name}</option>
-                ))}
-                <option value="Otros">Otros (Manual)</option>
-              </select>
+              <BookmakerSelect
+                bookmakers={enabledBookmakers}
+                value={enabledBookmakers.some(b => b.name === formData.bookmaker) ? formData.bookmaker : ''}
+                onChange={(name) => setFormData({ ...formData, bookmaker: name })}
+                recent={recentBookmakers}
+              />
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Mercado / Deporte</label>
@@ -251,6 +250,26 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
           </div>
 
           <div className="bg-zinc-950 rounded-3xl border border-white/5 p-6 space-y-4">
+            {/* Freebet: apuesta gratis (el importe no resta si se pierde) */}
+            <button
+              type="button"
+              role="switch"
+              aria-checked={formData.freebet}
+              onClick={() => setFormData({ ...formData, freebet: !formData.freebet })}
+              className={`w-full flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 transition-all ${formData.freebet ? 'bg-violet-500/10 border-violet-500/40' : 'bg-zinc-900 border-white/5 hover:border-white/15'}`}
+            >
+              <span className="flex items-center gap-3 text-left">
+                <span className={`px-2 py-1 rounded-lg text-[11px] font-black tracking-wider ${formData.freebet ? 'bg-violet-500 text-white' : 'bg-zinc-800 text-zinc-500'}`}>FB</span>
+                <span>
+                  <span className="block text-[11px] font-black text-white uppercase tracking-widest">Freebet / apuesta gratis</span>
+                  <span className="block text-[9px] font-bold text-zinc-500">Si se pierde no resta el importe; si se gana, solo cuenta la ganancia neta</span>
+                </span>
+              </span>
+              <span className={`relative w-10 h-6 rounded-full shrink-0 transition-all ${formData.freebet ? 'bg-violet-500' : 'bg-zinc-700'}`}>
+                <span className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${formData.freebet ? 'left-5' : 'left-1'}`} />
+              </span>
+            </button>
+
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-2">
                     <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Cuota</label>
@@ -262,10 +281,10 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
                     />
                 </div>
                 <div className="space-y-2">
-                    <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Importe (Stake)</label>
+                    <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">{formData.freebet ? 'Importe freebet' : 'Importe (Stake)'}</label>
                     <input 
                       type="text" 
-                      className="w-full bg-zinc-900 border border-[#e2001a]/50 rounded-2xl px-4 py-4 text-xl font-black text-white text-center transition-all focus:border-[#e2001a]" 
+                      className={`w-full bg-zinc-900 border rounded-2xl px-4 py-4 text-xl font-black text-center transition-all ${formData.freebet ? 'border-violet-500/50 text-violet-300 focus:border-violet-500' : 'border-[#e2001a]/50 text-white focus:border-[#e2001a]'}`} 
                       value={inputStake} 
                       onChange={(e) => setInputStake(e.target.value)} 
                     />
@@ -297,7 +316,7 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
                                 value={inputManualProfit} 
                                 onChange={(e) => setInputManualProfit(e.target.value)} 
                             />
-                            <p className="text-[8px] text-blue-400/50 font-bold text-center mt-2 uppercase">Introduce el importe TOTAL que has retirado. El sistema calculará el beneficio/pérdida restando tu apuesta automáticamente.</p>
+                            <p className="text-[8px] text-blue-400/50 font-bold text-center mt-2 uppercase">Introduce el importe TOTAL que has retirado. {formData.freebet ? 'Al ser freebet, todo lo cobrado cuenta como beneficio.' : 'El sistema calculará el beneficio/pérdida restando tu apuesta automáticamente.'}</p>
                         </div>
                     </div>
                 </div>

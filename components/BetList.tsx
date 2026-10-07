@@ -1,24 +1,23 @@
-import React, { useState, useMemo, useCallback, useRef } from 'react';
-import { Bet, BetStatus, Bankroll } from '../types';
+import React, { useState, useMemo, useCallback } from 'react';
+import { Bet, BetStatus, Bankroll, Bookmaker } from '../types';
 import { getSportIcon } from '../src/utils/icons';
-import { calculateYield } from '../src/utils/betMath';
+import { calculateYield, calculateProfit, parseDecimal, realStake, getPayout } from '../src/utils/betMath';
 import { downloadBetsCsv } from '../src/utils/exportCsv';
-import { getBookmakerBrand } from '../src/utils/bookmakers';
-import { renderBookmakerName } from '../src/utils/bookmakerStyles';
+import { BookmakerTag } from '../src/utils/bookmakerTag';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Filter, Columns, ChevronDown, Trash2, Edit3, Check, X, AlertTriangle, Calendar, Activity, Download, FileSpreadsheet, DatabaseBackup, FileUp } from 'lucide-react';
+import { Search, Filter, Columns, ChevronDown, Trash2, Edit3, Check, X, AlertTriangle, Calendar, Activity, Download, FileSpreadsheet, Banknote } from 'lucide-react';
 
 interface BetListProps {
   bets: Bet[];
-  /** Todas las apuestas, sin filtrar por bankroll (para la exportación completa) */
+  /** Todas las apuestas, sin filtrar por bankroll (para exportar todas a Excel) */
   allBets: Bet[];
+  /** Casas configuradas (para usar la imagen que el usuario haya subido a cada una) */
+  bookmakers: Bookmaker[];
   bankrolls: Bankroll[];
   activeBankrollName: string;
   onDelete: (id: string) => void;
   onUpdateStatus: (id: string, status: BetStatus, profit?: number) => void;
   onEdit: (bet: Bet) => void;
-  onExportBackup: () => void;
-  onImportBackup: (file: File) => void;
 }
 
 const formatStatusText = (status: BetStatus): string => {
@@ -39,26 +38,29 @@ const getStatusStyle = (status: BetStatus) => {
     case BetStatus.LOST: return 'bg-[#e2001a]/10 text-[#e2001a] border border-[#e2001a]/20';
     case BetStatus.CASH_OUT: return 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/20';
     case BetStatus.REFUNDED: return 'bg-blue-500/10 text-blue-400 border border-blue-500/20';
-    case BetStatus.CANCELLED: return 'bg-zinc-800 text-zinc-500 border border-white/5';
-    default: return 'bg-zinc-800 text-slate-400';
+    case BetStatus.CANCELLED: return 'bg-zinc-950 text-zinc-600 border border-zinc-800';
+    default: return 'bg-zinc-400/10 text-zinc-300 border border-zinc-400/20';
   }
 };
 
-const getRowHighlightClass = (status: BetStatus) => {
-  switch (status) {
-    case BetStatus.WON: 
-      return 'bg-emerald-500/[0.07] border-emerald-500/20 shadow-[0_0_20px_rgba(16,185,129,0.03)]';
-    case BetStatus.LOST: 
-      return 'bg-red-500/[0.07] border-red-500/20 shadow-[0_0_20px_rgba(226,0,26,0.03)]';
-    case BetStatus.CASH_OUT: 
-      return 'bg-yellow-500/[0.07] border-yellow-500/20 shadow-[0_0_20px_rgba(234,179,8,0.03)]';
-    case BetStatus.REFUNDED: 
-      return 'bg-blue-500/[0.07] border-blue-500/20 shadow-[0_0_20px_rgba(59,130,246,0.03)]';
-    case BetStatus.PENDING: 
-      return 'bg-white/[0.03] border-white/10 shadow-[0_0_20px_rgba(255,255,255,0.01)]';
-    default: 
-      return 'bg-zinc-900/20 border-white/5';
-  }
+// Color de cada estado (r, g, b) para el fondo, la franja lateral, el borde y la sombra de la tarjeta
+const STATUS_RGB: Record<BetStatus, string> = {
+  [BetStatus.PENDING]: '161, 161, 170',  // activa: gris
+  [BetStatus.WON]: '16, 185, 129',       // ganada: verde
+  [BetStatus.LOST]: '226, 0, 26',        // perdida: rojo
+  [BetStatus.CASH_OUT]: '234, 179, 8',   // cash out: amarillo
+  [BetStatus.REFUNDED]: '59, 130, 246',  // reembolsada: azul
+  [BetStatus.CANCELLED]: '39, 39, 42',  // anulada: casi negro
+};
+
+/** Estilo de la tarjeta según su estado (en línea, para que no lo tape el fondo de .glass-panel). */
+const getRowStyle = (status: BetStatus): React.CSSProperties => {
+  const c = STATUS_RGB[status] ?? STATUS_RGB[BetStatus.CANCELLED];
+  return {
+    background: `linear-gradient(90deg, rgba(${c}, 0.16) 0%, rgba(${c}, 0.05) 45%, rgba(18, 18, 18, 0.85) 100%)`,
+    borderColor: `rgba(${c}, 0.28)`,
+    boxShadow: `inset 3px 0 0 rgba(${c}, 0.9), 0 0 24px rgba(${c}, 0.06)`,
+  };
 };
 
 interface BetRowProps {
@@ -75,9 +77,13 @@ interface BetRowProps {
   onUpdateStatus: (id: string, status: BetStatus, profit?: number) => void;
   onEdit: (bet: Bet) => void;
   onDeleteRequest: (id: string) => void;
+  onCashOutRequest: (bet: Bet) => void;
+  /** Imagen de la casa guardada en Casas (puede ser una subida por el usuario) */
+  bookmakerIcon?: string;
 }
 
-const BetRow: React.FC<BetRowProps> = React.memo(({ bet, visibleColumns, onUpdateStatus, onEdit, onDeleteRequest }) => {
+const BetRow: React.FC<BetRowProps> = React.memo(({ bet, visibleColumns, onUpdateStatus, onEdit, onDeleteRequest, onCashOutRequest, bookmakerIcon }) => {
+  const payout = getPayout(bet);
   return (
     <motion.div 
       layout
@@ -85,7 +91,8 @@ const BetRow: React.FC<BetRowProps> = React.memo(({ bet, visibleColumns, onUpdat
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
       whileHover={{ scale: 1.005 }}
-      className={`glass-panel rounded-xl md:rounded-2xl p-2 md:p-3 lg:p-4 flex flex-col lg:flex-row items-center gap-2 lg:gap-3 group hover:border-white/20 transition-all w-full overflow-hidden ${getRowHighlightClass(bet.status)}`}
+      className="glass-panel rounded-xl md:rounded-2xl p-2 md:p-3 lg:p-4 flex flex-col lg:flex-row items-center gap-2 lg:gap-3 group transition-all w-full overflow-hidden"
+      style={getRowStyle(bet.status)}
     >
       {/* Contenedor Principal (Info + Stats en Móvil) */}
       <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0 w-full overflow-hidden">
@@ -97,36 +104,8 @@ const BetRow: React.FC<BetRowProps> = React.memo(({ bet, visibleColumns, onUpdat
         
         <div className="flex-1 min-w-0 overflow-hidden">
           <div className="flex items-center gap-1.5 md:gap-2 mb-0.5 flex-wrap overflow-hidden">
-            {visibleColumns.bookmaker && (() => {
-              const brand = getBookmakerBrand(bet.bookmaker);
-              return (
-                <div 
-                  className="relative flex items-center justify-center px-1.5 py-0.5 rounded-md shadow-sm border border-white/5 transition-all hover:scale-105 min-w-[45px] md:min-w-[80px] h-4 md:h-7 shrink-0 overflow-hidden"
-                  style={{ backgroundColor: brand.color }}
-                >
-                  <span 
-                    className="text-[7px] md:text-[11px] font-black uppercase tracking-tighter whitespace-nowrap"
-                    style={{ color: brand.textColor }}
-                  >
-                    {renderBookmakerName(bet.bookmaker)}
-                  </span>
-                  <img 
-                    src={brand.logo} 
-                    alt={bet.bookmaker} 
-                    className="absolute inset-0 w-full h-full object-contain p-0.5 bg-inherit rounded-md opacity-0 transition-opacity duration-300"
-                    style={{ filter: brand.logoFilter }}
-                    referrerPolicy="no-referrer"
-                    onLoad={(e) => {
-                      (e.target as HTMLImageElement).classList.remove('opacity-0');
-                      (e.target as HTMLImageElement).classList.add('opacity-100');
-                    }}
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = 'none';
-                    }}
-                  />
-                </div>
-              );
-            })()}
+            {visibleColumns.bookmaker && <BookmakerTag name={bet.bookmaker} icon={bookmakerIcon} />}
+            {bet.freebet && <span title="Freebet (apuesta gratis)" className="px-1.5 py-0.5 rounded-md bg-violet-500 text-white text-[9px] md:text-[10px] font-black tracking-wider shrink-0">FB</span>}
             {visibleColumns.date && (
               <span className="text-[8px] font-bold text-slate-500 uppercase tracking-tighter flex items-center gap-0.5 shrink-0 whitespace-nowrap">
                 <Calendar size={9} /> {new Date(bet.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
@@ -146,6 +125,9 @@ const BetRow: React.FC<BetRowProps> = React.memo(({ bet, visibleColumns, onUpdat
              <p className={`text-xs font-black tracking-tighter ${bet.status === BetStatus.PENDING ? 'text-zinc-700' : (bet.profit > 0 ? 'text-emerald-400' : bet.profit < 0 ? 'text-[#e2001a]' : 'text-slate-400')}`}>
                 {bet.status === BetStatus.PENDING ? '--' : `${bet.profit > 0 ? '+' : ''}${bet.profit.toFixed(2)}€`}
              </p>
+             {payout !== null && (
+               <p className="text-[8px] font-bold text-zinc-400 leading-none mt-1 uppercase tracking-tighter whitespace-nowrap">Cobrado {payout.toFixed(2)}€</p>
+             )}
            </div>
         </div>
       </div>
@@ -166,6 +148,13 @@ const BetRow: React.FC<BetRowProps> = React.memo(({ bet, visibleColumns, onUpdat
             </div>
           )}
           {visibleColumns.profit && (
+            // Total cobrado (solo en apuestas ganadas o con cash out); hueco vacío en el resto para que las columnas queden alineadas
+            <div className="text-right min-w-[80px] border-l border-white/5 pl-4">
+                <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest mb-0.5">{payout !== null ? 'Cobrado' : ' '}</p>
+                <p className="text-base font-black tracking-tighter text-white">{payout !== null ? `${payout.toFixed(2)}€` : ' '}</p>
+            </div>
+          )}
+          {visibleColumns.profit && (
             <div className="text-right min-w-[80px] border-l border-white/5 pl-4">
                 <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest mb-0.5">Beneficio</p>
                 <p className={`text-base font-black tracking-tighter ${bet.status === BetStatus.PENDING ? 'text-zinc-800' : (bet.profit > 0 ? 'text-emerald-400' : bet.profit < 0 ? 'text-[#e2001a]' : 'text-slate-400')}`}>
@@ -181,7 +170,7 @@ const BetRow: React.FC<BetRowProps> = React.memo(({ bet, visibleColumns, onUpdat
                 <div className="flex items-center gap-1 bg-zinc-950/50 p-1 rounded-xl border border-white/5">
                   <button onClick={() => onUpdateStatus(bet.id, BetStatus.WON)} className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white transition-all flex items-center justify-center shrink-0"><Check size={14} /></button>
                   <button onClick={() => onUpdateStatus(bet.id, BetStatus.LOST)} className="w-8 h-8 rounded-lg bg-[#e2001a]/10 text-[#e2001a] hover:bg-[#e2001a] hover:text-white transition-all flex items-center justify-center shrink-0"><X size={14} /></button>
-                  <button onClick={() => onEdit(bet)} className="w-8 h-8 rounded-lg bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500 hover:text-black transition-all flex items-center justify-center shrink-0"><Activity size={14} /></button>
+                  <button onClick={() => onCashOutRequest(bet)} title="Cash out" aria-label="Cash out" className="w-8 h-8 rounded-lg bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500 hover:text-black transition-all flex items-center justify-center shrink-0"><Banknote size={14} /></button>
                 </div>
               ) : (
                 <div className={`px-2 py-0.5 rounded-lg text-[7px] font-black uppercase tracking-widest whitespace-nowrap ${getStatusStyle(bet.status)}`}>
@@ -209,7 +198,7 @@ const BetRow: React.FC<BetRowProps> = React.memo(({ bet, visibleColumns, onUpdat
                <div className="flex gap-1 mr-2 pr-2 border-r border-white/5">
                  <button onClick={() => onUpdateStatus(bet.id, BetStatus.WON)} className="w-7 h-7 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center"><Check size={12} /></button>
                  <button onClick={() => onUpdateStatus(bet.id, BetStatus.LOST)} className="w-7 h-7 rounded-lg bg-[#e2001a]/10 text-[#e2001a] flex items-center justify-center"><X size={12} /></button>
-                 <button onClick={() => onEdit(bet)} className="w-7 h-7 rounded-lg bg-yellow-500/10 text-yellow-500 flex items-center justify-center"><Activity size={12} /></button>
+                 <button onClick={() => onCashOutRequest(bet)} title="Cash out" aria-label="Cash out" className="w-7 h-7 rounded-lg bg-yellow-500/10 text-yellow-500 flex items-center justify-center"><Banknote size={12} /></button>
                </div>
             )}
             <button onClick={() => onEdit(bet)} className="w-7 h-7 rounded-lg text-zinc-500 flex items-center justify-center"><Edit3 size={12} /></button>
@@ -221,15 +210,20 @@ const BetRow: React.FC<BetRowProps> = React.memo(({ bet, visibleColumns, onUpdat
   );
 });
 
-const BetList: React.FC<BetListProps> = ({ bets, allBets, bankrolls, activeBankrollName, onDelete, onUpdateStatus, onEdit, onExportBackup, onImportBackup }) => {
+const BetList: React.FC<BetListProps> = ({ bets, allBets, bookmakers, bankrolls, activeBankrollName, onDelete, onUpdateStatus, onEdit }) => {
+  const bookmakerIcons = useMemo(
+    () => new Map(bookmakers.map(b => [b.name.toLowerCase(), b.icon])),
+    [bookmakers]
+  );
   const [showExportMenu, setShowExportMenu] = useState(false);
-  const importInputRef = useRef<HTMLInputElement>(null);
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [bookmakerFilter, setBookmakerFilter] = useState<string>('ALL');
   const [grouping, setGrouping] = useState<'NONE' | 'DAY' | 'WEEK' | 'MONTH' | 'YEAR'>('MONTH');
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [betToDelete, setBetToDelete] = useState<string | null>(null);
+  const [betToCashOut, setBetToCashOut] = useState<Bet | null>(null);
+  const [cashOutAmount, setCashOutAmount] = useState('');
   const [visibleColumns, setVisibleColumns] = useState({
     sportIcon: true,
     bookmaker: true,
@@ -259,7 +253,7 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bankrolls, activeBankr
   const quickStats = useMemo(() => {
     const closed = filteredBets.filter(b => b.status !== BetStatus.PENDING);
     const profit = closed.reduce((acc, b) => acc + b.profit, 0);
-    const stake = closed.reduce((acc, b) => acc + b.stake, 0);
+    const stake = closed.reduce((acc, b) => acc + realStake(b), 0);
     return {
       profit,
       yield: calculateYield(profit, stake),
@@ -268,7 +262,7 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bankrolls, activeBankr
   }, [filteredBets]);
 
   const groupedBets = useMemo(() => {
-    if (grouping === 'NONE') return { 'Todas las apuestas': { bets: filteredBets, profit: quickStats.profit, stake: filteredBets.reduce((acc, b) => acc + (b.status !== BetStatus.PENDING ? b.stake : 0), 0) } };
+    if (grouping === 'NONE') return { 'Todas las apuestas': { bets: filteredBets, profit: quickStats.profit, stake: filteredBets.reduce((acc, b) => acc + (b.status !== BetStatus.PENDING ? realStake(b) : 0), 0) } };
 
     const groups: Record<string, { bets: Bet[]; profit: number; stake: number }> = {};
     const sortedBets = [...filteredBets].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -296,7 +290,7 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bankrolls, activeBankr
       groups[key].bets.push(bet);
       if (bet.status !== BetStatus.PENDING) {
         groups[key].profit += bet.profit;
-        groups[key].stake += bet.stake;
+        groups[key].stake += realStake(bet);
       }
     });
 
@@ -322,14 +316,6 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bankrolls, activeBankr
     downloadBetsCsv(allBets, bankrolls, `BetTrack_Todas_${today}.csv`);
     setShowExportMenu(false);
   }, [allBets, bankrolls]);
-
-  const handleImportChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) onImportBackup(file);
-    // Permite volver a elegir el mismo archivo
-    e.target.value = '';
-    setShowExportMenu(false);
-  }, [onImportBackup]);
 
   const toggleAllGroups = useCallback(() => {
     const allGroups = Object.keys(groupedBets);
@@ -488,7 +474,6 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bankrolls, activeBankr
                     <span>Exportar</span>
                     <ChevronDown size={12} className={`transition-transform ${showExportMenu ? 'rotate-180' : ''}`} />
                   </button>
-                  <input type="file" ref={importInputRef} className="hidden" accept=".json,application/json" onChange={handleImportChange} />
 
                   <AnimatePresence>
                     {showExportMenu && (
@@ -517,20 +502,6 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bankrolls, activeBankr
                             onClick={handleExportAllCsv}
                             disabled={allBets.length === 0}
                           />
-                          <div className="my-2 border-t border-white/5" />
-                          <p className="px-3 pt-1 pb-1 text-[9px] font-black text-slate-600 uppercase tracking-widest">Copia de seguridad</p>
-                          <ExportMenuItem
-                            icon={<DatabaseBackup size={16} />}
-                            title="Exportar todo"
-                            subtitle="Apuestas, bankrolls, casas y estadísticas"
-                            onClick={() => { onExportBackup(); setShowExportMenu(false); }}
-                          />
-                          <ExportMenuItem
-                            icon={<FileUp size={16} />}
-                            title="Importar copia"
-                            subtitle="Restaura tus datos desde un archivo .json"
-                            onClick={() => importInputRef.current?.click()}
-                          />
                         </motion.div>
                       </>
                     )}
@@ -549,7 +520,7 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bankrolls, activeBankr
                     statusFilter === f ? 'bg-[#e2001a] text-white shadow-lg shadow-red-900/20' : 'text-slate-500 hover:text-white hover:bg-white/5'
                 }`}
                 >
-                {f === 'ALL' ? 'Todas' : f === 'PENDING' ? 'Vivas' : formatStatusText(f as BetStatus)}
+                {f === 'ALL' ? 'Todas' : f === 'PENDING' ? 'Activas' : formatStatusText(f as BetStatus)}
                 </button>
             ))}
         </div>
@@ -663,7 +634,9 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bankrolls, activeBankr
                             visibleColumns={visibleColumns} 
                             onUpdateStatus={onUpdateStatus} 
                             onEdit={onEdit} 
-                            onDeleteRequest={setBetToDelete} 
+                            onDeleteRequest={setBetToDelete}
+                            onCashOutRequest={(b: Bet) => { setBetToCashOut(b); setCashOutAmount(''); }}
+                            bookmakerIcon={bookmakerIcons.get(bet.bookmaker.toLowerCase())}
                           />
                         ))}
                       </AnimatePresence>
@@ -727,6 +700,71 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bankrolls, activeBankr
             </motion.div>
           </div>
         )}
+      </AnimatePresence>
+
+      {/* Cash out: importe cobrado */}
+      <AnimatePresence>
+        {betToCashOut && (() => {
+          const amount = parseDecimal(cashOutAmount);
+          const valid = !Number.isNaN(amount);
+          const profit = valid ? calculateProfit(BetStatus.CASH_OUT, betToCashOut.odds, betToCashOut.stake, amount, betToCashOut.freebet) : null;
+          const confirm = () => {
+            if (!valid) return;
+            onUpdateStatus(betToCashOut.id, BetStatus.CASH_OUT, amount);
+            setBetToCashOut(null);
+          };
+          return (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setBetToCashOut(null)}>
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-zinc-950 border border-white/10 w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl"
+              >
+                <div className="w-16 h-16 bg-yellow-500/10 rounded-2xl flex items-center justify-center mb-6 mx-auto">
+                  <Banknote size={32} className="text-yellow-500" />
+                </div>
+                <h3 className="text-2xl font-black text-white text-center italic tracking-tight mb-1">Cash Out</h3>
+                <p className="text-slate-500 text-xs font-bold text-center mb-6 truncate">{betToCashOut.description || betToCashOut.bookmaker}</p>
+
+                <div className="grid grid-cols-2 gap-3 mb-4 text-center">
+                  <div className="bg-zinc-900 rounded-2xl py-3">
+                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">{betToCashOut.freebet ? 'Freebet' : 'Apostado'}</p>
+                    <p className={`text-lg font-black ${betToCashOut.freebet ? 'text-violet-300' : 'text-white'}`}>{betToCashOut.stake.toFixed(2)}€</p>
+                  </div>
+                  <div className="bg-zinc-900 rounded-2xl py-3">
+                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Cuota</p>
+                    <p className="text-lg font-black text-white">{betToCashOut.odds.toFixed(2)}</p>
+                  </div>
+                </div>
+
+                <label className="text-[10px] font-black text-yellow-500 uppercase tracking-widest">Importe total cobrado (€)</label>
+                <input
+                  autoFocus
+                  inputMode="decimal"
+                  value={cashOutAmount}
+                  onChange={(e) => setCashOutAmount(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') confirm(); }}
+                  placeholder="Ej: 15,50"
+                  className="mt-2 w-full bg-yellow-500/5 border border-yellow-500/30 rounded-2xl px-5 py-4 text-2xl font-black text-yellow-400 text-center outline-none focus:border-yellow-500"
+                />
+                <p className={`text-center text-sm font-black mt-3 h-5 ${profit === null ? 'text-slate-600' : profit >= 0 ? 'text-emerald-400' : 'text-[#e2001a]'}`}>
+                  {profit === null ? (cashOutAmount ? 'Introduce un importe válido' : '') : `Resultado: ${profit >= 0 ? '+' : ''}${profit.toFixed(2)}€`}
+                </p>
+
+                <div className="grid grid-cols-2 gap-4 mt-6">
+                  <button onClick={() => setBetToCashOut(null)} className="bg-zinc-900 text-white font-black py-4 rounded-2xl hover:bg-zinc-800 transition-all uppercase tracking-widest text-[10px]">
+                    Cancelar
+                  </button>
+                  <button onClick={confirm} disabled={!valid} className="bg-yellow-500 text-black font-black py-4 rounded-2xl hover:bg-yellow-400 transition-all uppercase tracking-widest text-[10px] disabled:opacity-30">
+                    Confirmar cash out
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          );
+        })()}
       </AnimatePresence>
     </motion.div>
   );

@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
 import { User } from '../types';
-import { X, ShieldCheck, Key, ChevronRight, AlertTriangle } from 'lucide-react';
+import { X, Key, ChevronRight, AlertTriangle } from 'lucide-react';
+import UserBadge from './UserBadge';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -119,7 +120,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
             <form onSubmit={handleUpdateProfile} className="space-y-4 p-6 bg-white/5 rounded-[2rem] border border-white/5">
               <div className="flex items-center gap-6 mb-4">
                 <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#e2001a] to-[#920011] flex items-center justify-center text-white shadow-2xl shadow-red-900/40">
-                  <ShieldCheck size={32} />
+                  <UserBadge plan={user.plan} size={32} />
                 </div>
                 <div className="min-w-0">
                   <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Email</p>

@@ -61,8 +61,6 @@ types.ts             Tipos de datos
 Las apuestas se guardan en el navegador (`localStorage`). Si borras los datos del navegador o cambias de
 dispositivo, se pierden, así que haz copias de seguridad de vez en cuando.
 
-En *Mis Apuestas → Exportar* tienes:
-
-- **Apuestas filtradas / Todas las apuestas**: CSV para abrir en Excel.
-- **Exportar todo**: copia de seguridad (.json) con apuestas, bankrolls, casas de apuestas y un resumen de estadísticas.
-- **Importar copia**: restaura una copia de seguridad (también desde *Bankrolls → Importar*). Se pide confirmación antes de reemplazar los datos.
+- *Mis Apuestas → Exportar*: CSV para abrir en Excel (apuestas filtradas o todas).
+- *Bankrolls → Backup*: copia de seguridad (.json) con apuestas, bankrolls, casas de apuestas y un resumen de estadísticas.
+- *Bankrolls → Importar*: restaura una copia de seguridad. Se pide confirmación antes de reemplazar los datos.

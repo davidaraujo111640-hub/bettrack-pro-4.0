@@ -9,6 +9,8 @@ import {
   validateBetForm,
   BetFormValues,
   buildEquityCurve,
+  computeBetStats,
+  getPayout,
 } from './betMath';
 
 describe('calculateProfit', () => {
@@ -156,5 +158,83 @@ describe('buildEquityCurve', () => {
     // La primera registrada (al final del array) es la pérdida
     const curve = buildEquityCurve([bet('2026-01-01', BetStatus.WON, 30), bet('2026-01-01', BetStatus.LOST, -10)], 100);
     expect(curve.points.map(p => p.balance)).toEqual([100, 90, 120]);
+  });
+});
+
+describe('computeBetStats', () => {
+  const mk = (id: string, date: string, status: BetStatus, odds: number, stake: number, profit: number, bookmaker = 'Bet365', sport: Bet['sport'] = 'Fútbol'): Bet =>
+    ({ id, bankrollId: 'b', date, bookmaker, sport, odds, stake, status, profit, description: '' });
+  // Guardadas de más nueva a más antigua
+  const bets = [
+    mk('6', '2026-02-03', BetStatus.PENDING, 1.8, 20, 0),
+    mk('5', '2026-02-02', BetStatus.REFUNDED, 2, 10, 0),
+    mk('4', '2026-02-01', BetStatus.LOST, 3.5, 10, -10, 'Codere', 'Tenis'),
+    mk('3', '2026-01-03', BetStatus.WON, 1.4, 50, 20),
+    mk('2', '2026-01-02', BetStatus.WON, 2, 10, 10),
+    mk('1', '2026-01-01', BetStatus.LOST, 2.5, 20, -20, 'Codere'),
+  ];
+  const s = computeBetStats(bets, 1000);
+
+  it('cuenta apuestas por estado', () => {
+    expect(s).toMatchObject({ total: 6, closed: 4, pending: 1, won: 2, lost: 2, voided: 1 });
+  });
+
+  it('calcula beneficio, yield, ROI y acierto sin contar anuladas ni pendientes', () => {
+    expect(s.staked).toBe(90);
+    expect(s.profit).toBe(0);
+    expect(s.winRate).toBe(50);
+    expect(s.roi).toBe(0);
+    expect(s.pendingStake).toBe(20);
+  });
+
+  it('calcula extremos, factor de beneficio y rachas', () => {
+    expect(s.biggestWin).toBe(20);
+    expect(s.biggestLoss).toBe(-20);
+    expect(s.profitFactor).toBe(1);
+    expect(s.bestWinStreak).toBe(2);
+    expect(s.worstLoseStreak).toBe(1);
+    expect(s.currentStreak).toBe(-1);
+  });
+
+  it('agrupa por casa, cuota y mes', () => {
+    expect(s.byBookmaker.find(g => g.key === 'Codere')).toMatchObject({ bets: 2, profit: -30 });
+    expect(s.byOdds.map(g => g.key)).toEqual(['< 1.50', '1.50 - 1.99', '2.00 - 2.99', '3.00 - 4.99']);
+    expect(s.byMonth.map(g => g.key)).toEqual(['2026-02', '2026-01']);
+  });
+});
+
+describe('freebets', () => {
+  it('ganada: solo la ganancia neta', () => {
+    expect(calculateProfit(BetStatus.WON, 3, 10, undefined, true)).toBe(20);
+  });
+
+  it('perdida: no resta nada', () => {
+    expect(calculateProfit(BetStatus.LOST, 3, 10, undefined, true)).toBe(0);
+  });
+
+  it('cash out: todo lo cobrado es beneficio', () => {
+    expect(calculateProfit(BetStatus.CASH_OUT, 3, 10, 7, true)).toBe(7);
+  });
+
+  it('no cuentan como dinero apostado en el yield, pero su beneficio sí suma', () => {
+    const mk = (id: string, status: BetStatus, stake: number, profit: number, freebet = false): Bet =>
+      ({ id, bankrollId: 'b', date: '2026-01-0' + id, bookmaker: 'X', sport: 'Fútbol', odds: 3, stake, status, profit, description: '', freebet });
+    const s = computeBetStats([mk('1', BetStatus.WON, 10, 10), mk('2', BetStatus.WON, 10, 20, true), mk('3', BetStatus.LOST, 10, 0, true)], 1000);
+    expect(s.staked).toBe(10);
+    expect(s.profit).toBe(30);
+    expect(s.yield).toBe(300);
+    expect(s.freebets).toBe(2);
+    expect(s.freebetProfit).toBe(20);
+  });
+});
+
+describe('getPayout', () => {
+  const b = (status: BetStatus, stake: number, profit: number, freebet = false) => ({ status, stake, profit, freebet });
+  it('ganada: importe + ganancia', () => expect(getPayout(b(BetStatus.WON, 10, 8.5))).toBe(18.5));
+  it('cash out: lo cobrado', () => expect(getPayout(b(BetStatus.CASH_OUT, 10, 5))).toBe(15));
+  it('freebet ganada: solo la ganancia', () => expect(getPayout(b(BetStatus.WON, 10, 20, true))).toBe(20));
+  it('pendiente o perdida: nada', () => {
+    expect(getPayout(b(BetStatus.PENDING, 10, 0))).toBeNull();
+    expect(getPayout(b(BetStatus.LOST, 10, -10))).toBeNull();
   });
 });
