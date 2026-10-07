@@ -14,7 +14,7 @@ if (!supabaseConfigured) {
   console.error('Faltan VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY (ver .env.example)');
 }
 
-export const supabase = createClient(url ?? 'http://localhost', key ?? 'missing', {
+export const supabase = createClient(url || 'http://localhost', key || 'missing', {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
 });
 
