@@ -99,3 +99,19 @@ export function applyRemote<T extends { id: string }>(list: T[], id: string, ite
   copy[idx] = item;
   return copy;
 }
+
+export type LoadPlan = 'migrate' | 'start-empty' | 'use-cloud';
+
+/**
+ * Qué hacer al entrar con una cuenta, según lo que hay en la nube y en este navegador.
+ * - migrate: hay apuestas de antes de tener cuenta y la nube aún no tiene ninguna: preguntar si se suben.
+ *   Se mira solo si hay APUESTAS en la nube: un bankroll vacío creado al estrenar la cuenta
+ *   (por ejemplo, abriéndola antes en otro navegador) no debe impedir recuperar las de este.
+ * - start-empty: cuenta sin ningún dato.
+ * - use-cloud: la nube manda.
+ */
+export function planLoad(p: { owner: string | null; localBets: number; cloudBets: number; cloudBankrolls: number }): LoadPlan {
+  if (p.owner === null && p.localBets > 0 && p.cloudBets === 0) return 'migrate';
+  if (p.cloudBets === 0 && p.cloudBankrolls === 0) return 'start-empty';
+  return 'use-cloud';
+}

@@ -24,6 +24,20 @@ import type { CloudData } from './src/lib/cloudSync';
 
 const DEFAULT_BANKROLL: Bankroll = { id: 'default', name: 'Bankroll Principal', initialCapital: 1000, color: '#e2001a' };
 
+const LOCAL_BACKUP_KEY = 'bt_local_backup';
+
+/** Lee la copia local de seguridad (la guarda useCloudSync) si existe y es válida */
+function readLocalBackup(): BackupData | null {
+  try {
+    const raw = localStorage.getItem(LOCAL_BACKUP_KEY);
+    if (!raw) return null;
+    const parsed = parseBackup(raw);
+    return parsed.ok && parsed.data.bets.length > 0 ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Datos de una cuenta nueva */
 const emptyData = (): CloudData => ({ bets: [], bankrolls: [DEFAULT_BANKROLL], bookmakers: defaultBookmakers() });
 import { 
@@ -261,8 +275,24 @@ const App: React.FC = () => {
     }
   }, [showToast]);
 
+  // Copia que la app guarda sola si, al entrar con la cuenta, había datos de antes en este dispositivo
+  const [localBackup, setLocalBackup] = useState<BackupData | null>(readLocalBackup);
+
+  const handleRestoreLocalBackup = useCallback(() => {
+    if (localBackup) setPendingRestore(localBackup);
+  }, [localBackup]);
+
+  const handleDownloadLocalBackup = useCallback(() => {
+    if (!localBackup) return;
+    downloadBackup({ bets: localBackup.bets, bankrolls: localBackup.bankrolls, bookmakers: localBackup.bookmakers ?? [] });
+  }, [localBackup]);
+
   const confirmRestore = useCallback(() => {
     if (!pendingRestore) return;
+    if (pendingRestore === localBackup) {
+      try { localStorage.removeItem(LOCAL_BACKUP_KEY); } catch { /* da igual */ }
+      setLocalBackup(null);
+    }
     setBets(pendingRestore.bets);
     setBankrolls(pendingRestore.bankrolls);
     if (pendingRestore.bookmakers && pendingRestore.bookmakers.length > 0) {
@@ -272,7 +302,7 @@ const App: React.FC = () => {
     setPendingRestore(null);
     showToast(`Datos restaurados: ${pendingRestore.bets.length} apuestas`);
     updateLastSaved();
-  }, [pendingRestore, showToast, updateLastSaved]);
+  }, [pendingRestore, localBackup, showToast, updateLastSaved]);
 
   const handleLogout = useCallback(() => {
     setIsLogoutConfirmOpen(true);
@@ -513,7 +543,7 @@ const App: React.FC = () => {
               <Route path="/" element={<Dashboard stats={stats} bets={filteredBets} userName={user?.name} userPlan={user?.plan} onProfileClick={() => setIsProfileModalOpen(true)} />} />
               <Route path="/bets" element={<BetList bets={filteredBets} allBets={bets} bookmakers={bookmakers} bankrolls={bankrolls} activeBankrollName={activeBankrollName} onDelete={handleDeleteBet} onUpdateStatus={handleUpdateStatus} onEdit={handleEdit} />} />
               <Route path="/statistics" element={<Statistics bets={filteredBets} stats={stats} bankrolls={bankrolls} activeBankrollId={activeBankrollId} onSelectBankroll={handleSetActiveBankroll} />} />
-              <Route path="/bankrolls" element={<BankrollManager bankrolls={bankrolls} bets={bets} onUpdate={setBankrolls} activeBankrollId={activeBankrollId} onSelect={handleSetActiveBankroll} onExportBackup={handleExportBackup} onImportBackup={handleImportBackupFile} />} />
+              <Route path="/bankrolls" element={<BankrollManager bankrolls={bankrolls} bets={bets} onUpdate={setBankrolls} activeBankrollId={activeBankrollId} onSelect={handleSetActiveBankroll} onExportBackup={handleExportBackup} onImportBackup={handleImportBackupFile} localBackup={localBackup ? { bets: localBackup.bets.length, bankrolls: localBackup.bankrolls.length } : null} onRestoreLocalBackup={handleRestoreLocalBackup} onDownloadLocalBackup={handleDownloadLocalBackup} />} />
               <Route path="/bookmakers" element={<BookmakerManager bookmakers={bookmakers} onUpdate={setBookmakers} />} />
             </Routes>
           </div>

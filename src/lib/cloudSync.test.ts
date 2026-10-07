@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BetStatus, type Bet } from '../../types';
-import { applyRemote, diffSnapshot, mergeQueue, rowsToData, stableStringify, toSnapshot, type CloudData } from './cloudSync';
+import { applyRemote, diffSnapshot, mergeQueue, planLoad, rowsToData, stableStringify, toSnapshot, type CloudData } from './cloudSync';
 
 const bet = (id: string, extra: Partial<Bet> = {}): Bet => ({
   id, bankrollId: 'default', date: '2026-10-01', bookmaker: 'Bet365', sport: 'Fútbol',
@@ -66,5 +66,27 @@ describe('applyRemote', () => {
     expect(applyRemote(list, '2', { id: '2', v: 2 })).toEqual([{ id: '2', v: 2 }, { id: '1', v: 1 }]);
     expect(applyRemote(list, '1', { id: '1', v: 9 })).toEqual([{ id: '1', v: 9 }]);
     expect(applyRemote(list, '1', null)).toEqual([]);
+  });
+});
+
+describe('planLoad', () => {
+  it('ofrece subir las apuestas de antes si la nube no tiene ninguna', () => {
+    expect(planLoad({ owner: null, localBets: 200, cloudBets: 0, cloudBankrolls: 0 })).toBe('migrate');
+  });
+
+  it('un bankroll vacío en la nube (cuenta abierta antes en otro navegador) no impide recuperarlas', () => {
+    expect(planLoad({ owner: null, localBets: 200, cloudBets: 0, cloudBankrolls: 1 })).toBe('migrate');
+  });
+
+  it('si la nube ya tiene apuestas, manda la nube', () => {
+    expect(planLoad({ owner: null, localBets: 200, cloudBets: 5, cloudBankrolls: 1 })).toBe('use-cloud');
+  });
+
+  it('cuenta sin ningún dato y sin apuestas locales empieza vacía', () => {
+    expect(planLoad({ owner: null, localBets: 0, cloudBets: 0, cloudBankrolls: 0 })).toBe('start-empty');
+  });
+
+  it('si el navegador ya era de esta cuenta, no pregunta otra vez', () => {
+    expect(planLoad({ owner: 'u1', localBets: 200, cloudBets: 0, cloudBankrolls: 1 })).toBe('use-cloud');
   });
 });

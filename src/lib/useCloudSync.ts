@@ -3,7 +3,7 @@ import type { Bankroll, Bet, Bookmaker } from '../../types';
 import { supabase } from './supabase';
 import {
   CloudData, ItemRow, Kind, Op, Snapshot,
-  applyRemote, diffSnapshot, itemKey, mergeQueue, rowsToData, stableStringify, toSnapshot,
+  applyRemote, diffSnapshot, itemKey, mergeQueue, planLoad, rowsToData, stableStringify, toSnapshot,
 } from './cloudSync';
 
 /**
@@ -76,6 +76,8 @@ export function useCloudSync({ userId, data, setBets, setBankrolls, setBookmaker
   const [legacyCount, setLegacyCount] = useState(0);
 
   const snapshotRef = useRef<Snapshot | null>(null);
+  /** Lo que había en la nube al preguntar si se suben los datos antiguos */
+  const migrateCloudRef = useRef<CloudData | null>(null);
   const queueRef = useRef<Op[]>([]);
   const flushingRef = useRef(false);
   const flushTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -135,14 +137,15 @@ export function useCloudSync({ userId, data, setBets, setBankrolls, setBookmaker
         const cloud = rowsToData(await fetchAll());
         if (cancelled) return;
 
-        const cloudEmpty = cloud.bets.length === 0 && cloud.bankrolls.length === 0;
-        if (cloudEmpty) {
-          if (owner === null && local.bets.length > 0) {
-            // Datos de antes de tener cuenta: preguntar si se suben
-            setLegacyCount(local.bets.length);
-            setStatus('migrate');
-            return;
-          }
+        const plan = planLoad({ owner, localBets: local.bets.length, cloudBets: cloud.bets.length, cloudBankrolls: cloud.bankrolls.length });
+        if (plan === 'migrate') {
+          // Datos de antes de tener cuenta: preguntar si se suben
+          migrateCloudRef.current = cloud;
+          setLegacyCount(local.bets.length);
+          setStatus('migrate');
+          return;
+        }
+        if (plan === 'start-empty') {
           // Cuenta nueva: si los datos del navegador son de otra cuenta, se empieza de cero
           if (owner !== userId) setAll(emptyData());
           snapshotRef.current = {};
@@ -234,8 +237,9 @@ export function useCloudSync({ userId, data, setBets, setBankrolls, setBookmaker
       try { localStorage.setItem(LEGACY_BACKUP_KEY, JSON.stringify(dataRef.current)); } catch { /* sin espacio */ }
       setAll(emptyData());
     }
-    // Foto vacía: todo lo que haya ahora se sube
-    snapshotRef.current = {};
+    // La foto es lo que hay en la nube: se sube lo de este dispositivo y lo que sobre allí se retira
+    snapshotRef.current = migrateCloudRef.current ? toSnapshot(migrateCloudRef.current) : {};
+    migrateCloudRef.current = null;
     localStorage.setItem(OWNER_KEY, userId);
     setStatus('ready');
   }, [userId, setAll, emptyData]);

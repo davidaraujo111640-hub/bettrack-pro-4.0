@@ -12,7 +12,8 @@ import {
   Globe, 
   Edit2, 
   Trash2, 
-  AlertTriangle 
+  AlertTriangle,
+  ArchiveRestore
 } from 'lucide-react';
 
 interface BankrollManagerProps {
@@ -23,9 +24,13 @@ interface BankrollManagerProps {
   onSelect: (id: string) => void;
   onExportBackup: () => void;
   onImportBackup: (file: File) => void;
+  /** Datos de este dispositivo anteriores a la cuenta que la app guardó por seguridad */
+  localBackup?: { bets: number; bankrolls: number } | null;
+  onRestoreLocalBackup?: () => void;
+  onDownloadLocalBackup?: () => void;
 }
 
-const BankrollManager: React.FC<BankrollManagerProps> = ({ bankrolls, bets, activeBankrollId, onUpdate, onSelect, onExportBackup, onImportBackup }) => {
+const BankrollManager: React.FC<BankrollManagerProps> = ({ bankrolls, bets, activeBankrollId, onUpdate, onSelect, onExportBackup, onImportBackup, localBackup, onRestoreLocalBackup, onDownloadLocalBackup }) => {
   const navigate = useNavigate();
   const [isAdding, setIsAdding] = useState(false);
   const [editingBank, setEditingBank] = useState<Bankroll | null>(null);
@@ -151,6 +156,24 @@ const BankrollManager: React.FC<BankrollManagerProps> = ({ bankrolls, bets, acti
           <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={handleImport} />
         </div>
       </header>
+
+      {localBackup && (
+        <div className="bg-[#ffcc00]/10 border border-[#ffcc00]/30 rounded-3xl p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+          <div className="flex items-start gap-3 min-w-0 flex-1">
+            <ArchiveRestore className="w-5 h-5 text-[#ffcc00] shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="text-xs font-black text-white uppercase tracking-wide">Datos guardados en este dispositivo</p>
+              <p className="text-[11px] font-bold text-slate-400 mt-1">
+                Hay una copia de seguridad de antes de tu cuenta: {localBackup.bets} apuestas y {localBackup.bankrolls} bankrolls. Puedes recuperarla o descargarla.
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <button onClick={onDownloadLocalBackup} className="flex-1 sm:flex-none bg-white/5 border border-white/10 text-slate-300 px-4 py-3 rounded-2xl font-black uppercase text-[10px] hover:text-white transition-all">Descargar</button>
+            <button onClick={onRestoreLocalBackup} className="flex-1 sm:flex-none bg-[#ffcc00] text-black px-4 py-3 rounded-2xl font-black uppercase text-[10px] hover:brightness-110 transition-all">Recuperar</button>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Card Global Especial - Solo se muestra cuando no estamos viendo archivados */}
