@@ -314,6 +314,13 @@ const App: React.FC = () => {
     return [...counts.entries()].sort((x, y) => y[1] - x[1]).slice(0, 4).map(([name]) => name);
   }, [bets]);
 
+  // Los 4 deportes con más apuestas registradas, para el selector de deporte
+  const recentSports = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const b of bets) if (b.sport) counts.set(b.sport, (counts.get(b.sport) ?? 0) + 1);
+    return [...counts.entries()].sort((x, y) => y[1] - x[1]).slice(0, 4).map(([name]) => name);
+  }, [bets]);
+
   const activeBankrollName = useMemo(() => {
     if (activeBankrollId === 'all') return 'Global';
     return bankrolls.find(b => b.id === activeBankrollId)?.name || 'Bankroll';
@@ -522,6 +529,7 @@ const App: React.FC = () => {
             onSubmit={handleAddBet}
             initialData={editingBet || undefined}
             recentBookmakers={recentBookmakers}
+            recentSports={recentSports}
           />
         )}
 

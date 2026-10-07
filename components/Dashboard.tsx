@@ -7,7 +7,8 @@ import UserBadge from './UserBadge';
 import AnimatedLogo from './AnimatedLogo';
 import { User } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
-import { TrendingUp, TrendingDown, ShieldCheck, Check, X, Activity, Zap, Clock } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { TrendingUp, TrendingDown, ShieldCheck, Check, X, Activity, Zap, Clock, Landmark } from 'lucide-react';
 
 interface DashboardProps {
   stats: BankrollStats;
@@ -154,13 +155,23 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, bets, userName, userPlan, 
                 </span>
               </div>
               
-              {/* Profile Icon Mobile (Only visible in Dashboard/Home per user request) */}
-              <button 
-                onClick={onProfileClick}
-                className="md:hidden w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10 transition-all border border-white/5 active:scale-90"
-              >
-                <UserBadge plan={userPlan} size={20} />
-              </button>
+              {/* Casas y perfil en móvil (en escritorio están en la barra lateral) */}
+              <div className="md:hidden flex items-center gap-2">
+                <Link
+                  to="/bookmakers"
+                  aria-label="Casas de apuestas"
+                  className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10 transition-all border border-white/5 active:scale-90"
+                >
+                  <Landmark size={18} />
+                </Link>
+                <button 
+                  onClick={onProfileClick}
+                  aria-label="Mi perfil"
+                  className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10 transition-all border border-white/5 active:scale-90"
+                >
+                  <UserBadge plan={userPlan} size={20} />
+                </button>
+              </div>
             </div>
             <h2 className="text-3xl md:text-4xl font-black tracking-tighter text-white mt-1">Hola, <span className="text-[#ffcc00]">{userName || 'Usuario'}</span></h2>
         </motion.div>

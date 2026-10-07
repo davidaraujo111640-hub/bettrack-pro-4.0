@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { supabase, supabaseConfigured, authErrorMessage } from '../src/lib/supabase';
 import { LineChart, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
+import InstallPrompt from './InstallPrompt';
 
 interface AuthProps {
   /** 'reset' = se ha abierto el enlace de recuperación: pedir la contraseña nueva */
@@ -178,6 +179,8 @@ const Auth: React.FC<AuthProps> = ({ mode = 'login', onResetDone }) => {
             </div>
           )}
         </div>
+
+        {!isResetting && <InstallPrompt />}
 
         <p className="text-center text-zinc-700 text-[9px] font-bold mt-8 uppercase tracking-[0.2em]">
           &copy; 2026 BetTrack Pro • Cuentas protegidas con Supabase

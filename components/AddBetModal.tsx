@@ -4,6 +4,7 @@ import { Bet, BetStatus, Sport, Bankroll, Bookmaker } from '../types';
 import { Camera, Loader2, X, Banknote, AlertTriangle } from 'lucide-react';
 import { parseDecimal, validateBetForm } from '../src/utils/betMath';
 import BookmakerSelect from './BookmakerSelect';
+import SportSelect from './SportSelect';
 
 interface AddBetModalProps {
   bankrolls: Bankroll[];
@@ -14,6 +15,8 @@ interface AddBetModalProps {
   initialData?: Bet;
   /** Casas más usadas, para mostrarlas arriba en el selector */
   recentBookmakers?: string[];
+  /** Deportes más usados, para mostrarlos arriba en el selector */
+  recentSports?: string[];
 }
 
 const SPORTS: Sport[] = [
@@ -32,7 +35,7 @@ const SPORTS: Sport[] = [
   'Otros'
 ];
 
-const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, activeBankrollId, onClose, onSubmit, initialData, recentBookmakers }) => {
+const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, activeBankrollId, onClose, onSubmit, initialData, recentBookmakers, recentSports }) => {
   const enabledBookmakers = bookmakers.filter(b => b.enabled);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isExtracting, setIsExtracting] = useState(false);
@@ -226,9 +229,12 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Mercado / Deporte</label>
-              <select className="w-full bg-zinc-900 border border-white/10 rounded-2xl px-4 py-4 text-sm font-bold text-white outline-none focus:border-[#e2001a]" value={formData.sport} onChange={(e) => setFormData({...formData, sport: e.target.value as Sport})}>
-                {SPORTS.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
+              <SportSelect
+                sports={SPORTS}
+                value={formData.sport}
+                onChange={(sport) => setFormData({ ...formData, sport })}
+                recent={recentSports}
+              />
             </div>
           </div>
 
