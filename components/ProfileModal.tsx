@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { User } from '../types';
 import { X, Key, ChevronRight, AlertTriangle } from 'lucide-react';
 import UserBadge from './UserBadge';
+import { supabase, authErrorMessage } from '../src/lib/supabase';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -25,6 +26,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
 
   // Sync name state when user prop changes
   React.useEffect(() => {
@@ -33,7 +35,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleUpdateProfile = (e: React.FormEvent) => {
+  const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -42,28 +44,15 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
       return;
     }
 
-    try {
-      const users = JSON.parse(localStorage.getItem('bt_users') || '[]');
-      const userIdx = users.findIndex((u: User & { password?: string }) => u.email.toLowerCase() === user.email.toLowerCase());
-
-      if (userIdx !== -1) {
-        users[userIdx].name = name.trim();
-        localStorage.setItem('bt_users', JSON.stringify(users));
-        
-        // Update session as well
-        const updatedUser = { ...user, name: name.trim() };
-        onUpdate(updatedUser);
-        showToast('¡Nombre de perfil actualizado con éxito!', 'success');
-      } else {
-        setError('No se pudo encontrar el usuario en la base de datos.');
-      }
-    } catch (err) {
-      console.error('Error updating profile:', err);
-      setError('Error al guardar los cambios.');
-    }
+    setSaving(true);
+    const { error: err } = await supabase.auth.updateUser({ data: { name: name.trim() } });
+    setSaving(false);
+    if (err) { setError(authErrorMessage(err)); return; }
+    onUpdate({ ...user, name: name.trim() });
+    showToast('¡Nombre de perfil actualizado con éxito!', 'success');
   };
 
-  const handlePasswordChange = (e: React.FormEvent) => {
+  const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -77,22 +66,18 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
       return;
     }
 
-    const users = JSON.parse(localStorage.getItem('bt_users') || '[]');
-    const userIdx = users.findIndex((u: User & { password?: string }) => u.email.toLowerCase() === user.email.toLowerCase());
-
-    if (userIdx === -1) {
-      setError('Usuario no encontrado.');
-      return;
-    }
-
-    if (users[userIdx].password !== currentPassword) {
+    setSaving(true);
+    // Se comprueba la contraseña actual volviendo a entrar con ella
+    const check = await supabase.auth.signInWithPassword({ email: user.email, password: currentPassword });
+    if (check.error) {
+      setSaving(false);
       setError('La contraseña actual es incorrecta.');
       return;
     }
+    const { error: err } = await supabase.auth.updateUser({ password: newPassword });
+    setSaving(false);
+    if (err) { setError(authErrorMessage(err)); return; }
 
-    users[userIdx].password = newPassword;
-    localStorage.setItem('bt_users', JSON.stringify(users));
-    
     showToast('Contraseña actualizada correctamente', 'success');
     setIsChangingPassword(false);
     setCurrentPassword('');
@@ -146,7 +131,8 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
                 </span>
                 <button 
                   type="submit"
-                  className="px-6 py-2 bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl text-[9px] font-black text-white uppercase tracking-widest transition-all"
+                  disabled={saving}
+                  className="disabled:opacity-50 px-6 py-2 bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl text-[9px] font-black text-white uppercase tracking-widest transition-all"
                 >
                   Guardar
                 </button>
@@ -213,8 +199,9 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
 
                   <div className="flex gap-3">
                     <button 
-                      type="submit" 
-                      className="flex-1 py-4 bg-[#e2001a] rounded-2xl text-[10px] font-black text-white hover:bg-red-500 transition-all uppercase tracking-widest"
+                      type="submit"
+                      disabled={saving}
+                      className="disabled:opacity-50 flex-1 py-4 bg-[#e2001a] rounded-2xl text-[10px] font-black text-white hover:bg-red-500 transition-all uppercase tracking-widest"
                     >
                       Actualizar
                     </button>

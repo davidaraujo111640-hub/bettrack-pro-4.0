@@ -15,10 +15,17 @@ import AnimatedLogo from './components/AnimatedLogo';
 import UpdatePrompt from './components/UpdatePrompt';
 import UserBadge from './components/UserBadge';
 import { Bet, BetStatus, BankrollStats, Bankroll, User, Bookmaker } from './types';
-import { getBookmakerIcon } from './src/utils/bookmakers';
-import { isCustomBookmakerIcon } from './src/utils/bookmakerIcons';
+import { defaultBookmakers, normalizeBookmakers } from './src/utils/defaultBookmakers';
 import { calculateProfit, calculateRoi, calculateYield, realStake } from './src/utils/betMath';
 import { BackupData, downloadBackup, parseBackup } from './src/utils/backup';
+import { supabase, toAppUser } from './src/lib/supabase';
+import { useCloudSync } from './src/lib/useCloudSync';
+import type { CloudData } from './src/lib/cloudSync';
+
+const DEFAULT_BANKROLL: Bankroll = { id: 'default', name: 'Bankroll Principal', initialCapital: 1000, color: '#e2001a' };
+
+/** Datos de una cuenta nueva */
+const emptyData = (): CloudData => ({ bets: [], bankrolls: [DEFAULT_BANKROLL], bookmakers: defaultBookmakers() });
 import { 
   Home, 
   ListCheck, 
@@ -31,129 +38,37 @@ import {
   ChevronDown, 
   CheckCircle2, 
   PlusCircle, 
-  Plus
+  Plus,
+  RefreshCw,
+  CloudOff,
+  LineChart
 } from 'lucide-react';
 
-const REMOVED_BOOKMAKER_IDS = new Set(['wanabet']);
-
 const App: React.FC = () => {
-  const [user, setUser] = useState<User | null>(() => {
-    try {
-      const saved = localStorage.getItem('bt_session');
-      return saved ? JSON.parse(saved) : null;
-    } catch (e) {
-      console.error("Error parsing user session", e);
-      return null;
-    }
-  });
+  // Sesión real de Supabase. authReady evita enseñar el login un instante mientras se lee la sesión guardada
+  const [user, setUser] = useState<User | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+  // Se ha abierto el enlace de "recuperar contraseña" del email: pedir la nueva
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
 
   const [bankrolls, setBankrolls] = useState<Bankroll[]>(() => {
     try {
       const saved = localStorage.getItem('bt_bankrolls');
-      return saved ? JSON.parse(saved) : [{ id: 'default', name: 'Bankroll Principal', initialCapital: 1000, color: '#e2001a' }];
+      return saved ? JSON.parse(saved) : [DEFAULT_BANKROLL];
     } catch (e) {
       console.error("Error parsing bankrolls", e);
-      return [{ id: 'default', name: 'Bankroll Principal', initialCapital: 1000, color: '#e2001a' }];
+      return [DEFAULT_BANKROLL];
     }
   });
 
   const [bookmakers, setBookmakers] = useState<Bookmaker[]>(() => {
-    const defaultBookmakers: Bookmaker[] = [
-      { id: '888sport', name: '888sport', icon: getBookmakerIcon('888sport'), enabled: true },
-      { id: 'admiralbet', name: 'AdmiralBet', icon: getBookmakerIcon('AdmiralBet'), enabled: true },
-      { id: 'bet365', name: 'Bet365', icon: getBookmakerIcon('Bet365'), enabled: true },
-      { id: 'betfair', name: 'Betfair', icon: getBookmakerIcon('Betfair'), enabled: true },
-      { id: 'betsson', name: 'Betsson', icon: getBookmakerIcon('Betsson'), enabled: true },
-      { id: 'betway', name: 'Betway', icon: getBookmakerIcon('Betway'), enabled: true },
-      { id: 'bet777', name: 'Bet777', icon: getBookmakerIcon('Bet777'), enabled: true },
-      { id: 'bwin', name: 'Bwin', icon: getBookmakerIcon('Bwin'), enabled: true },
-      { id: 'casinobarcelona', name: 'Casino Barcelona', icon: getBookmakerIcon('Casino Barcelona'), enabled: true },
-      { id: 'casinogranmadrid', name: 'Casino Gran Madrid', icon: getBookmakerIcon('Casino Gran Madrid'), enabled: true },
-      { id: 'codere', name: 'Codere', icon: getBookmakerIcon('Codere'), enabled: true },
-      { id: 'ebingo', name: 'Ebingo', icon: getBookmakerIcon('Ebingo'), enabled: true },
-      { id: 'efbet', name: 'Efbet', icon: getBookmakerIcon('Efbet'), enabled: true },
-      { id: 'enracha', name: 'Enracha', icon: getBookmakerIcon('Enracha'), enabled: true },
-      { id: 'goldenpark', name: 'GoldenPark', icon: getBookmakerIcon('GoldenPark'), enabled: true },
-      { id: 'interwetten', name: 'Interwetten', icon: getBookmakerIcon('Interwetten'), enabled: true },
-      { id: 'jokerbet', name: 'Jokerbet', icon: getBookmakerIcon('Jokerbet'), enabled: true },
-      { id: 'kirolbet', name: 'Kirolbet', icon: getBookmakerIcon('Kirolbet'), enabled: true },
-      { id: 'leovegas', name: 'LeoVegas', icon: getBookmakerIcon('LeoVegas'), enabled: true },
-      { id: 'luckia', name: 'Luckia', icon: getBookmakerIcon('Luckia'), enabled: true },
-      { id: 'marathonbet', name: 'Marathonbet', icon: getBookmakerIcon('Marathonbet'), enabled: true },
-      { id: 'marcaapuestas', name: 'Marca Apuestas', icon: getBookmakerIcon('Marca Apuestas'), enabled: true },
-      { id: 'olybet', name: 'OlyBet', icon: getBookmakerIcon('OlyBet'), enabled: true },
-      { id: 'paf', name: 'Paf', icon: getBookmakerIcon('Paf'), enabled: true },
-      { id: 'paston', name: 'Pastón', icon: getBookmakerIcon('Pastón'), enabled: true },
-      { id: 'pokerstars', name: 'PokerStars Sports', icon: getBookmakerIcon('PokerStars Sports'), enabled: true },
-      { id: 'retabet', name: 'Retabet', icon: getBookmakerIcon('Retabet'), enabled: true },
-      { id: 'sportium', name: 'Sportium', icon: getBookmakerIcon('Sportium'), enabled: true },
-      { id: 'tonybet', name: 'TonyBet', icon: getBookmakerIcon('TonyBet'), enabled: true },
-      { id: 'versus', name: 'Versus', icon: getBookmakerIcon('Versus'), enabled: true },
-      { id: 'williamhill', name: 'William Hill', icon: getBookmakerIcon('William Hill'), enabled: true },
-      { id: 'winamax', name: 'Winamax', icon: getBookmakerIcon('Winamax'), enabled: true },
-      { id: '1xbet', name: '1xBet', icon: getBookmakerIcon('1xBet'), enabled: true },
-      { id: 'aupabet', name: 'Aupabet', icon: getBookmakerIcon('Aupabet'), enabled: true },
-      { id: 'betfred', name: 'Betfred', icon: getBookmakerIcon('Betfred'), enabled: true },
-      { id: 'betinia', name: 'Betinia', icon: getBookmakerIcon('Betinia'), enabled: true },
-      { id: 'casinogranvia', name: 'Casino Gran Vía', icon: getBookmakerIcon('Casino Gran Vía'), enabled: true },
-      { id: 'casumo', name: 'Casumo', icon: getBookmakerIcon('Casumo'), enabled: true },
-      { id: 'dafabet', name: 'Dafabet', icon: getBookmakerIcon('Dafabet'), enabled: true },
-      { id: 'daznbet', name: 'DAZN Bet', icon: getBookmakerIcon('DAZN Bet'), enabled: true },
-      { id: 'juegging', name: 'Juegging', icon: getBookmakerIcon('Juegging'), enabled: true },
-      { id: 'speedybet', name: 'Speedybet', icon: getBookmakerIcon('Speedybet'), enabled: true },
-      { id: 'yaasscasino', name: 'Yaass Casino', icon: getBookmakerIcon('Yaass Casino'), enabled: true },
-      { id: 'yosports', name: 'YoSports', icon: getBookmakerIcon('YoSports'), enabled: true },
-      { id: 'zebet', name: 'ZEbet', icon: getBookmakerIcon('ZEbet'), enabled: true },
-      { id: 'zeturf', name: 'ZEturf', icon: getBookmakerIcon('ZEturf'), enabled: true },
-      { id: 'botemania', name: 'Botemanía', icon: getBookmakerIcon('Botemanía'), enabled: true },
-      { id: 'goldenbull', name: 'Golden Bull', icon: getBookmakerIcon('Golden Bull'), enabled: true },
-      { id: 'monopolycasino', name: 'Monopoly Casino', icon: getBookmakerIcon('Monopoly Casino'), enabled: true },
-      { id: 'solcasino', name: 'Sol Casino', icon: getBookmakerIcon('Sol Casino'), enabled: true },
-    ].sort((a, b) => a.name.localeCompare(b.name));
-
     try {
       const saved = localStorage.getItem('bt_bookmakers');
-      if (saved) {
-        const savedList = JSON.parse(saved);
-        if (!Array.isArray(savedList)) return defaultBookmakers;
-        
-        const savedIds = new Set(savedList.map((b: Bookmaker) => b.id));
-        const savedNames = new Set(savedList.map((b: Bookmaker) => b.name?.toLowerCase()));
-        
-        const missing = defaultBookmakers.filter(b => 
-          !savedIds.has(b.id) && !savedNames.has(b.name.toLowerCase())
-        );
-        
-        const uniqueSaved: Bookmaker[] = [];
-        const seenNames = new Set<string>();
-        
-        savedList.forEach((b: Bookmaker) => {
-          // Casas que se han retirado de la lista y no deben volver a aparecer
-          if (b && REMOVED_BOOKMAKER_IDS.has(b.id)) return;
-          if (b && b.name && !seenNames.has(b.name.toLowerCase())) {
-            // Las imágenes subidas por el usuario se respetan; el resto se regeneran
-            const isCustomIcon = isCustomBookmakerIcon(b.icon);
-            let updatedBookmaker = b as Bookmaker;
-            
-            if (!isCustomIcon) {
-              const officialIcon = getBookmakerIcon(b.name);
-              if (b.icon !== officialIcon) {
-                updatedBookmaker = { ...b, icon: officialIcon };
-              }
-            }
-            
-            uniqueSaved.push(updatedBookmaker);
-            seenNames.add(b.name.toLowerCase());
-          }
-        });
-
-        return [...uniqueSaved, ...missing].sort((a, b) => a.name.localeCompare(b.name));
-      }
+      if (saved) return normalizeBookmakers(JSON.parse(saved));
     } catch (e) {
       console.error("Error parsing bookmakers", e);
     }
-    
-    return defaultBookmakers;
+    return defaultBookmakers();
   });
 
   const [activeBankrollId, setActiveBankrollId] = useState<string>('all');
@@ -178,13 +93,6 @@ const App: React.FC = () => {
 
   const updateLastSaved = useCallback(() => setLastSaved(new Date().toLocaleTimeString()), []);
 
-  useEffect(() => {
-    if (user) {
-      localStorage.setItem('bt_session', JSON.stringify(user));
-    } else {
-      localStorage.removeItem('bt_session');
-    }
-  }, [user]);
 
   useEffect(() => {
     localStorage.setItem('bt_bankrolls', JSON.stringify(bankrolls));
@@ -201,6 +109,40 @@ const App: React.FC = () => {
   const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToast({ message, type });
   }, []);
+
+  useEffect(() => {
+    // Restos del login antiguo (solo local), ya no se usan
+    localStorage.removeItem('bt_session');
+    localStorage.removeItem('bt_users');
+
+    // Para dar la bienvenida solo al entrar de verdad (Supabase también avisa al recuperar la sesión)
+    let hadUser: boolean | null = null;
+    supabase.auth.getSession().then(({ data }) => {
+      hadUser = !!data.session;
+      setUser(data.session ? toAppUser(data.session.user) : null);
+      setAuthReady(true);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') setIsPasswordRecovery(true);
+      if (event === 'SIGNED_IN' && session && hadUser === false) showToast(`Bienvenido, ${toAppUser(session.user).name}`);
+      if (event !== 'INITIAL_SESSION') hadUser = !!session;
+      setUser(session ? toAppUser(session.user) : null);
+      setAuthReady(true);
+    });
+    return () => subscription.unsubscribe();
+  }, [showToast]);
+
+  // Datos en la nube: carga al entrar, sube cada cambio y recibe los de otros dispositivos
+  const cloudData = useMemo<CloudData>(() => ({ bets, bankrolls, bookmakers }), [bets, bankrolls, bookmakers]);
+  const cloud = useCloudSync({
+    userId: user?.id ?? null,
+    data: cloudData,
+    setBets,
+    setBankrolls,
+    setBookmakers,
+    normalizeBookmakers,
+    emptyData,
+  });
 
   const filteredBets = useMemo(() => {
     if (activeBankrollId === 'all') {
@@ -255,7 +197,7 @@ const App: React.FC = () => {
       } else {
         const betWithId: Bet = {
           ...betData,
-          id: Math.random().toString(36).substr(2, 9),
+          id: crypto.randomUUID(),
           profit
         };
         return [betWithId, ...prevBets];
@@ -337,6 +279,7 @@ const App: React.FC = () => {
   }, []);
 
   const confirmLogout = useCallback(() => {
+    supabase.auth.signOut();
     setUser(null);
     setIsLogoutConfirmOpen(false);
     showToast('Sesión cerrada correctamente', 'info');
@@ -354,11 +297,6 @@ const App: React.FC = () => {
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isBankrollDropdownOpen]);
-
-  const handleLogin = useCallback((u: User) => {
-    setUser(u);
-    showToast(`Bienvenido, ${u.name}`);
-  }, [showToast]);
 
   const handleSetActiveBankroll = useCallback((id: string) => {
     setActiveBankrollId(id);
@@ -381,8 +319,53 @@ const App: React.FC = () => {
     return bankrolls.find(b => b.id === activeBankrollId)?.name || 'Bankroll';
   }, [activeBankrollId, bankrolls]);
 
+  if (!authReady) {
+    return <div className="min-h-screen bg-[#050505]" />;
+  }
+
+  if (isPasswordRecovery) {
+    return <Auth mode="reset" onResetDone={() => { setIsPasswordRecovery(false); showToast('Contraseña actualizada'); }} />;
+  }
+
   if (!user) {
-    return <Auth onLogin={handleLogin} />;
+    return <Auth />;
+  }
+
+  if (cloud.status === 'loading' || cloud.status === 'idle') {
+    return (
+      <div className="min-h-screen bg-[#050505] flex flex-col items-center justify-center gap-4">
+        <div className="w-16 h-16 bg-[#e2001a] rounded-[1.5rem] flex items-center justify-center shadow-2xl shadow-red-900/40 animate-pulse"><LineChart className="text-white w-8 h-8" /></div>
+        <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">Cargando tus datos…</p>
+      </div>
+    );
+  }
+
+  if (cloud.status === 'needs-online') {
+    return (
+      <div className="min-h-screen bg-[#050505] flex items-center justify-center p-6">
+        <div className="glass-panel rounded-[2.5rem] p-8 max-w-sm text-center space-y-4">
+          <p className="text-lg font-black text-white uppercase italic">Sin conexión</p>
+          <p className="text-xs font-bold text-slate-400">La primera vez que entras en este dispositivo hace falta internet para descargar tus datos. Después ya funciona sin conexión.</p>
+          <button onClick={() => window.location.reload()} className="w-full py-4 bg-[#e2001a] rounded-2xl text-[10px] font-black text-white uppercase tracking-widest">Reintentar</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (cloud.status === 'migrate') {
+    return (
+      <div className="min-h-screen bg-[#050505]">
+        <ConfirmModal
+          isOpen
+          title="Subir tus datos a tu cuenta"
+          message={`En este dispositivo tienes ${cloud.legacyCount} apuestas guardadas de antes de tener cuenta. ¿Las subimos a tu cuenta para verlas desde cualquier dispositivo? Si eliges empezar de cero se guarda una copia en este navegador.`}
+          confirmText="Subir mis apuestas"
+          cancelText="Empezar de cero"
+          onConfirm={() => { cloud.resolveMigration(true); showToast(`${cloud.legacyCount} apuestas subidas a tu cuenta`); }}
+          onCancel={() => cloud.resolveMigration(false)}
+        />
+      </div>
+    );
   }
 
   return (
@@ -480,8 +463,10 @@ const App: React.FC = () => {
                 )}
 
                 <div className="mt-2 px-4 pb-2 flex items-center justify-between">
-                   <span className="text-[8px] font-black text-emerald-500 uppercase tracking-tighter flex items-center gap-1">
-                      <CheckCircle2 className="w-2 h-2" /> Guardado en este dispositivo
+                   <span className={`text-[8px] font-black uppercase tracking-tighter flex items-center gap-1 ${cloud.syncState === 'synced' ? 'text-emerald-500' : cloud.syncState === 'pending' ? 'text-[#ffcc00]' : 'text-slate-500'}`}>
+                      {cloud.syncState === 'synced' && <><CheckCircle2 className="w-2 h-2" /> Guardado en la nube</>}
+                      {cloud.syncState === 'pending' && <><RefreshCw className="w-2 h-2 animate-spin" /> Sincronizando…</>}
+                      {cloud.syncState === 'offline' && <><CloudOff className="w-2 h-2" /> Sin conexión · se subirá luego</>}
                    </span>
                    <span className="text-[8px] font-bold text-slate-600 italic">{lastSaved}</span>
                 </div>
@@ -523,7 +508,6 @@ const App: React.FC = () => {
               <Route path="/statistics" element={<Statistics bets={filteredBets} stats={stats} bankrolls={bankrolls} activeBankrollId={activeBankrollId} onSelectBankroll={handleSetActiveBankroll} />} />
               <Route path="/bankrolls" element={<BankrollManager bankrolls={bankrolls} bets={bets} onUpdate={setBankrolls} activeBankrollId={activeBankrollId} onSelect={handleSetActiveBankroll} onExportBackup={handleExportBackup} onImportBackup={handleImportBackupFile} />} />
               <Route path="/bookmakers" element={<BookmakerManager bookmakers={bookmakers} onUpdate={setBookmakers} />} />
-              <Route path="/auth" element={<Auth onLogin={setUser} />} />
             </Routes>
           </div>
         </main>
