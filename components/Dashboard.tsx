@@ -8,7 +8,7 @@ import AnimatedLogo from './AnimatedLogo';
 import { User } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { TrendingUp, TrendingDown, ShieldCheck, Check, X, Activity, Zap, Clock, Landmark } from 'lucide-react';
+import { TrendingUp, TrendingDown, ShieldCheck, Check, X, Activity, Zap, Clock, Landmark, Cloud, CloudOff, RefreshCw } from 'lucide-react';
 
 interface DashboardProps {
   stats: BankrollStats;
@@ -16,6 +16,9 @@ interface DashboardProps {
   userName?: string;
   userPlan?: User['plan'];
   onProfileClick?: () => void;
+  /** Estado de la sincronización con la nube (solo se muestra en móvil, donde no hay barra lateral) */
+  syncState?: 'synced' | 'pending' | 'offline';
+  onSyncClick?: () => void;
 }
 
 interface CustomTooltipProps {
@@ -44,7 +47,7 @@ const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
   return null;
 };
 
-const Dashboard: React.FC<DashboardProps> = ({ stats, bets, userName, userPlan, onProfileClick }) => {
+const Dashboard: React.FC<DashboardProps> = ({ stats, bets, userName, userPlan, onProfileClick, syncState, onSyncClick }) => {
   const [chartPeriod, setChartPeriod] = useState<'WEEK' | 'MONTH' | 'YEAR' | 'ALL'>('ALL');
 
   const periods: { id: 'WEEK' | 'MONTH' | 'YEAR' | 'ALL'; label: string }[] = [
@@ -157,6 +160,17 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, bets, userName, userPlan, 
               
               {/* Casas y perfil en móvil (en escritorio están en la barra lateral) */}
               <div className="md:hidden flex items-center gap-2">
+                {syncState && (
+                  <button
+                    onClick={onSyncClick}
+                    aria-label={syncState === 'synced' ? 'Guardado en la nube' : syncState === 'pending' ? 'Sincronizando' : 'Sin conexión'}
+                    className={`w-10 h-10 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10 transition-all border border-white/5 active:scale-90 ${syncState === 'synced' ? 'text-emerald-500' : syncState === 'pending' ? 'text-[#ffcc00]' : 'text-slate-500'}`}
+                  >
+                    {syncState === 'synced' && <Cloud size={18} />}
+                    {syncState === 'pending' && <RefreshCw size={18} className="animate-spin" />}
+                    {syncState === 'offline' && <CloudOff size={18} />}
+                  </button>
+                )}
                 <Link
                   to="/bookmakers"
                   aria-label="Casas de apuestas"
