@@ -7,7 +7,10 @@ import type { User } from '../../types';
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
 
-if (!url || !key) {
+/** false si esta versión se construyó sin las claves de Supabase (variables de entorno sin configurar) */
+export const supabaseConfigured = Boolean(url && key);
+
+if (!supabaseConfigured) {
   console.error('Faltan VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY (ver .env.example)');
 }
 

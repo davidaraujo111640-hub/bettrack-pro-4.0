@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { supabase, authErrorMessage } from '../src/lib/supabase';
+import { supabase, supabaseConfigured, authErrorMessage } from '../src/lib/supabase';
 import { LineChart, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
 
 interface AuthProps {
@@ -32,6 +32,10 @@ const Auth: React.FC<AuthProps> = ({ mode = 'login', onResetDone }) => {
     e.preventDefault();
     setError('');
     setSuccess('');
+    if (!supabaseConfigured) {
+      setError('Esta versión de la web no está configurada (faltan las claves de Supabase). Abre la dirección principal de la app.');
+      return;
+    }
     const mail = email.trim();
 
     if (isResetting) {
