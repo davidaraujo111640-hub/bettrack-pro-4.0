@@ -8,7 +8,10 @@ import AnimatedLogo from './AnimatedLogo';
 import { User } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { TrendingUp, TrendingDown, ShieldCheck, Check, X, Activity, Zap, Clock, Landmark, Cloud, CloudOff, RefreshCw } from 'lucide-react';
+import ChartViewer from './ChartViewer';
+import { buildDetailSeries } from '../src/utils/chartDetail';
+import { parseLocalDate } from '../src/utils/dates';
+import { TrendingUp, TrendingDown, ShieldCheck, Check, X, Activity, Zap, Clock, Landmark, Cloud, CloudOff, RefreshCw, Maximize2 } from 'lucide-react';
 
 interface DashboardProps {
   stats: BankrollStats;
@@ -57,35 +60,30 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, bets, userName, userPlan, 
     { id: 'ALL', label: 'Todo' }
   ];
 
-  // Explicitly type chartData to ensure cumulativeProfit is treated as a number
-  const chartData = useMemo(() => {
-    const now = new Date();
-    let filteredBets = bets.filter(b => b.status !== BetStatus.PENDING);
-
-    if (chartPeriod === 'WEEK') {
-      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      filteredBets = filteredBets.filter(b => new Date(b.date) >= weekAgo);
-    } else if (chartPeriod === 'MONTH') {
-      const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      filteredBets = filteredBets.filter(b => new Date(b.date) >= monthAgo);
-    } else if (chartPeriod === 'YEAR') {
-      const yearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
-      filteredBets = filteredBets.filter(b => new Date(b.date) >= yearAgo);
-    }
-
-    const sortedBets = [...filteredBets].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-    const data: { date: string; cumulativeProfit: number }[] = [{ date: 'Inicio', cumulativeProfit: 0 }];
-    let currentSum = 0;
-    sortedBets.forEach(bet => {
-      currentSum += bet.profit;
-      data.push({
-        date: new Date(bet.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }),
-        cumulativeProfit: Number(currentSum.toFixed(2))
-      });
-    });
-    return data;
+  // Apuestas cerradas dentro del periodo elegido
+  const periodBets = useMemo(() => {
+    const closed = bets.filter(b => b.status !== BetStatus.PENDING);
+    const days = chartPeriod === 'WEEK' ? 7 : chartPeriod === 'MONTH' ? 30 : chartPeriod === 'YEAR' ? 365 : null;
+    if (days === null) return closed;
+    const limit = new Date(new Date().getTime() - days * 24 * 60 * 60 * 1000);
+    return closed.filter(b => parseLocalDate(b.date) >= limit);
   }, [bets, chartPeriod]);
+
+  // Curva de profit acumulado: la misma serie alimenta la gráfica de aquí y la vista ampliada en horizontal
+  const detailSeries = useMemo(() => buildDetailSeries(periodBets, 0), [periodBets]);
+  const chartData = useMemo(
+    () => detailSeries.map(p => ({
+      date: p.index === 0 ? 'Inicio' : parseLocalDate(p.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }),
+      cumulativeProfit: p.value,
+    })),
+    [detailSeries]
+  );
+
+  // En el móvil (pantalla estrecha o táctil), tocar la gráfica la abre ampliada y en horizontal
+  const [chartOpen, setChartOpen] = useState(false);
+  const openChart = () => {
+    if (window.matchMedia('(max-width: 767px), (pointer: coarse)').matches) setChartOpen(true);
+  };
 
   const lastFiveBets = useMemo(() => {
     return bets
@@ -364,7 +362,14 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, bets, userName, userPlan, 
                   ))}
                 </div>
             </div>
-            <div className="h-[220px] md:h-[320px] w-full">
+            <div className="relative h-[220px] md:h-[320px] w-full cursor-pointer md:cursor-default" onClick={openChart}>
+                <button
+                  type="button"
+                  aria-label="Ampliar la gráfica en horizontal"
+                  className="md:hidden absolute top-0 right-0 z-10 w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-slate-300 active:scale-90 transition-transform"
+                >
+                  <Maximize2 size={14} />
+                </button>
                 <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={chartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                     <defs>
@@ -468,6 +473,10 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, bets, userName, userPlan, 
             </motion.div>
         </div>
       </div>
+
+      {chartOpen && (
+        <ChartViewer title="Curva de profit" kind="profit" points={detailSeries} baseline={0} onClose={() => setChartOpen(false)} />
+      )}
     </motion.div>
   );
 };

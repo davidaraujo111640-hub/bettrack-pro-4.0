@@ -3,6 +3,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Bet, BankrollStats, BetStatus, Bankroll } from '../types';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid, AreaChart, Area, ReferenceLine } from 'recharts';
 import { buildEquityCurve } from '../src/utils/betMath';
+import { buildDetailSeries } from '../src/utils/chartDetail';
+import ChartViewer from './ChartViewer';
+import { Maximize2 } from 'lucide-react';
 import BankrollStatsPanel from './BankrollStatsPanel';
 
 interface StatisticsProps {
@@ -72,6 +75,14 @@ const Statistics: React.FC<StatisticsProps> = ({ bets, stats, bankrolls, activeB
   const equity = useMemo(() => buildEquityCurve(bets, stats.initialBankroll), [bets, stats.initialBankroll]);
   const bankrollEvolution = equity.points;
 
+  // Misma evolución del saldo, con el detalle de cada operación, para la vista ampliada en horizontal
+  const detailSeries = useMemo(() => buildDetailSeries(bets, stats.initialBankroll), [bets, stats.initialBankroll]);
+  // En el móvil (pantalla estrecha o táctil), tocar la gráfica la abre ampliada y en horizontal
+  const [chartOpen, setChartOpen] = useState(false);
+  const openChart = () => {
+    if (window.matchMedia('(max-width: 767px), (pointer: coarse)').matches) setChartOpen(true);
+  };
+
   // Punto del degradado donde el saldo cruza el capital inicial (verde por encima, rojo por debajo)
   const off = useMemo(() => {
     const dataMax = Math.max(...bankrollEvolution.map((i) => i.cumulative));
@@ -111,23 +122,23 @@ const Statistics: React.FC<StatisticsProps> = ({ bets, stats, bankrolls, activeB
 
         {/* Bankroll Selector */}
         <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2 -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap">
-          <button 
+          <button
             onClick={() => onSelectBankroll('all')}
             className={`whitespace-nowrap px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${
-              activeBankrollId === 'all' 
-              ? 'bg-[#e2001a] text-white border-[#e2001a] shadow-lg shadow-red-900/20' 
+              activeBankrollId === 'all'
+              ? 'bg-[#e2001a] text-white border-[#e2001a] shadow-lg shadow-red-900/20'
               : 'bg-zinc-900 text-slate-400 border-white/5 hover:border-white/10'
             }`}
           >
             Global
           </button>
           {bankrolls.filter(b => !b.archived).map(b => (
-            <button 
+            <button
               key={b.id}
               onClick={() => onSelectBankroll(b.id)}
               className={`whitespace-nowrap px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${
-                activeBankrollId === b.id 
-                ? 'bg-[#e2001a] text-white border-[#e2001a] shadow-lg shadow-red-900/20' 
+                activeBankrollId === b.id
+                ? 'bg-[#e2001a] text-white border-[#e2001a] shadow-lg shadow-red-900/20'
                 : 'bg-zinc-900 text-slate-400 border-white/5 hover:border-white/10'
               }`}
             >
@@ -150,14 +161,14 @@ const Statistics: React.FC<StatisticsProps> = ({ bets, stats, bankrolls, activeB
 
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie 
-                  data={statusDistribution} 
-                  cx="50%" 
-                  cy="50%" 
-                  innerRadius={windowWidth < 640 ? 35 : 60} 
-                  outerRadius={windowWidth < 640 ? 55 : 80} 
-                  paddingAngle={10} 
-                  dataKey="value" 
+                <Pie
+                  data={statusDistribution}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={windowWidth < 640 ? 35 : 60}
+                  outerRadius={windowWidth < 640 ? 55 : 80}
+                  paddingAngle={10}
+                  dataKey="value"
                   stroke="none"
                 >
                   {statusDistribution.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
@@ -203,8 +214,15 @@ const Statistics: React.FC<StatisticsProps> = ({ bets, stats, bankrolls, activeB
               </div>
             </div>
           </div>
-          
-          <div className="h-64 md:h-80 w-full">
+
+          <div className="relative h-64 md:h-80 w-full cursor-pointer md:cursor-default" onClick={openChart}>
+            <button
+              type="button"
+              aria-label="Ampliar la gráfica en horizontal"
+              className="md:hidden absolute top-0 right-0 z-10 w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-slate-300 active:scale-90 transition-transform"
+            >
+              <Maximize2 size={14} />
+            </button>
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={bankrollEvolution}>
                 <defs>
@@ -222,21 +240,21 @@ const Statistics: React.FC<StatisticsProps> = ({ bets, stats, bankrolls, activeB
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="8 8" stroke="#ffffff03" vertical={false} />
-                <XAxis 
-                  dataKey="name" 
-                  stroke="#525252" 
-                  fontSize={9} 
-                  tickLine={false} 
-                  axisLine={false} 
+                <XAxis
+                  dataKey="name"
+                  stroke="#525252"
+                  fontSize={9}
+                  tickLine={false}
+                  axisLine={false}
                   fontWeight="800"
                   dy={10}
                   interval={Math.floor(bankrollEvolution.length / 10)}
                 />
-                <YAxis 
-                  stroke="#525252" 
-                  fontSize={10} 
-                  tickLine={false} 
-                  axisLine={false} 
+                <YAxis
+                  stroke="#525252"
+                  fontSize={10}
+                  tickLine={false}
+                  axisLine={false}
                   fontWeight="800"
                   tickFormatter={(value) => `${value}€`}
                   domain={['auto', 'auto']}
@@ -257,12 +275,12 @@ const Statistics: React.FC<StatisticsProps> = ({ bets, stats, bankrolls, activeB
                     const { cx, cy, payload, index } = props;
                     if (bankrollEvolution.length >= 50 || (payload.cumulative === 0 && index === 0)) return <span key={index} />;
                     return (
-                      <circle 
+                      <circle
                         key={index}
-                        cx={cx} 
-                        cy={cy} 
-                        r={4} 
-                        fill={payload.cumulative >= 0 ? '#10b981' : '#e2001a'} 
+                        cx={cx}
+                        cy={cy}
+                        r={4}
+                        fill={payload.cumulative >= 0 ? '#10b981' : '#e2001a'}
                         stroke="#050505"
                         strokeWidth={2}
                       />
@@ -275,6 +293,10 @@ const Statistics: React.FC<StatisticsProps> = ({ bets, stats, bankrolls, activeB
           </div>
         </div>
       </div>
+
+      {chartOpen && (
+        <ChartViewer title="Evolución del bankroll" kind="balance" points={detailSeries} baseline={stats.initialBankroll} onClose={() => setChartOpen(false)} />
+      )}
 
       <BankrollStatsPanel
         bets={bets}

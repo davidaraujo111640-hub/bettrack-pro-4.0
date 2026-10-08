@@ -6,6 +6,19 @@ El formato sigue [Versionado semántico](https://semver.org/lang/es/): **MAYOR.M
 - **MENOR** (1.0.1 → 1.1.0): funciones nuevas que no rompen nada de lo que ya había.
 - **MAYOR** (1.1.0 → 2.0.0): cambios grandes que obligan a los usuarios a hacer algo o cambian cómo se guardan los datos.
 
+## 1.2.0 · 8 oct 2026
+
+Gráficas a pantalla completa y en horizontal.
+
+- En el móvil, al tocar la **curva de profit** (Resumen) o la **evolución del bankroll** (Estadísticas) se abre la gráfica ampliada y en horizontal. Hay un botón de ampliar en la esquina de cada gráfica.
+- Si el móvil está en vertical (como la app instalada, que está fijada así), el contenido se gira solo y se lee girando el móvil; si ya está en horizontal, ocupa la pantalla directamente.
+- Se recorre con el dedo: un cursor marca la operación y muestra su fecha, la apuesta y casa, lo que ganó o perdió, el profit o saldo en ese momento y la caída desde el máximo.
+- Resumen del tramo: profit o saldo actual, máximo, mínimo, mejor y peor operación, caída máxima y número de operaciones.
+- Se puede acercar a las últimas 20, 50 o 100 operaciones.
+- Se cierra con el botón, con "atrás" del móvil o con Escape.
+- La curva de Resumen respeta el periodo elegido (7D, 30D, 1A, Todo) también en la vista ampliada.
+- En ordenador no cambia nada.
+
 ## 1.1.3 · 8 oct 2026
 
 Registro cerrado: acceso solo por invitación.
