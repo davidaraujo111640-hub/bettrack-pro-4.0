@@ -4,6 +4,7 @@ import { User } from '../types';
 import { X, Key, ChevronRight, AlertTriangle } from 'lucide-react';
 import UserBadge from './UserBadge';
 import { supabase, authErrorMessage } from '../src/lib/supabase';
+import { fullVersion } from '../src/version';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -233,6 +234,8 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
                 )}
               </div>
             </div>
+
+            <p className="text-center text-[10px] font-bold text-slate-600 tracking-wide">BetTrack Pro {fullVersion()}</p>
           </div>
         </div>
       </div>

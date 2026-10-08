@@ -1,10 +1,25 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+import { execSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+
+// Versión de la app (package.json), fecha de publicación y código del cambio (Vercel o Git)
+const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string };
+function gitCommit(): string {
+  const fromVercel = process.env.VERCEL_GIT_COMMIT_SHA;
+  if (fromVercel) return fromVercel.slice(0, 7);
+  try { return execSync('git rev-parse HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim().slice(0, 7); } catch { return 'dev'; }
+}
 
 // Importante: no expongas claves de API aquí. Todo lo que se define en el
 // frontend acaba visible en el navegador. Las claves viven solo en el servidor.
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+    __APP_BUILD_DATE__: JSON.stringify(new Date().toISOString()),
+    __APP_COMMIT__: JSON.stringify(gitCommit()),
+  },
   plugins: [
     react(),
     // App instalable (PWA): el service worker guarda la app en el dispositivo para que

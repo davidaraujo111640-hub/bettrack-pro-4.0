@@ -34,6 +34,19 @@ El archivo `.env` está excluido de git: nunca subas tu clave al repositorio.
 | `npm run build` | Genera la versión de producción en `dist/`            |
 | `npm start`     | Sirve la versión de producción (tras `npm run build`) |
 
+## Versiones
+
+La versión está en el campo `version` de `package.json` y se muestra en la pantalla de acceso y en *Mi perfil* (junto con la fecha y el código del cambio). Los cambios de cada versión se apuntan en `CHANGELOG.md`.
+
+Para publicar una versión nueva:
+
+1. Apunta los cambios en `CHANGELOG.md`, en una sección nueva con el número y la fecha.
+2. Sube el número (sin crear commits ni etiquetas):
+   - `npm version patch --no-git-tag-version` → arreglos (1.0.0 → 1.0.1)
+   - `npm version minor --no-git-tag-version` → funciones nuevas (1.0.1 → 1.1.0)
+   - `npm version major --no-git-tag-version` → cambios grandes (1.1.0 → 2.0.0)
+3. Haz commit y push: Vercel publica la versión nueva.
+
 ## Despliegue (Vercel)
 
 El proyecto se despliega en Vercel:

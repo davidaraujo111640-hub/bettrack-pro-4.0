@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { supabase, supabaseConfigured, authErrorMessage } from '../src/lib/supabase';
 import { LineChart, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
 import InstallPrompt from './InstallPrompt';
+import { shortVersion } from '../src/version';
 import DataRescue from './DataRescue';
 
 interface AuthProps {
@@ -185,7 +186,7 @@ const Auth: React.FC<AuthProps> = ({ mode = 'login', onResetDone }) => {
         {!supabaseConfigured && <DataRescue />}
 
         <p className="text-center text-zinc-700 text-[9px] font-bold mt-8 uppercase tracking-[0.2em]">
-          &copy; 2026 BetTrack Pro • Cuentas protegidas con Supabase
+          &copy; 2026 BetTrack Pro {shortVersion()} • Cuentas protegidas con Supabase
         </p>
       </div>
     </div>
