@@ -13,6 +13,7 @@ Tipografías alojadas en la propia web.
 - Las tipografías (la principal y las de los logotipos de las casas) se sirven desde la propia web en vez de pedirse a Google Fonts: la primera pantalla carga antes, no se comparte ninguna visita con terceros y las letras también funcionan sin conexión.
 - Solo incluyen los caracteres latinos (suficiente para el español) y pesan 241 KB en total; el navegador baja únicamente las que usa cada pantalla.
 - Licencia SIL Open Font License 1.1, que permite alojarlas (ver `public/fonts/LICENCIAS.txt`).
+- Las tipografías se guardan en el navegador durante un año: no se vuelven a descargar en cada visita.
 
 ## 1.1.1 · 8 oct 2026
 
