@@ -22,7 +22,7 @@ import { loadSanitized, sanitizeBankroll, sanitizeBet, sanitizeBookmaker } from 
 import { safeSetItem, STORAGE_ERROR_EVENT } from './src/utils/safeStorage';
 import { isParlay, resolveParlay, setLegStatus } from './src/utils/parlay';
 import { BackupData, downloadBackup, parseBackup } from './src/utils/backup';
-import { supabase, toAppUser } from './src/lib/supabase';
+import { openedFromInvite, supabase, toAppUser } from './src/lib/supabase';
 import { useCloudSync } from './src/lib/useCloudSync';
 import { takeSharedImage } from './src/utils/sharedImage';
 import type { CloudData } from './src/lib/cloudSync';
@@ -67,7 +67,8 @@ const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
   // Se ha abierto el enlace de "recuperar contraseña" del email: pedir la nueva
-  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
+  // (o se ha abierto una invitación: quien entra por primera vez tiene que crear su contraseña)
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(openedFromInvite);
 
   const [bankrolls, setBankrolls] = useState<Bankroll[]>(() => {
     try {

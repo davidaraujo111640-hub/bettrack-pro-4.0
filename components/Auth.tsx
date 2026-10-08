@@ -1,6 +1,6 @@
 
-import React, { useState } from 'react';
-import { supabase, supabaseConfigured, authErrorMessage } from '../src/lib/supabase';
+import React, { useEffect, useState } from 'react';
+import { supabase, supabaseConfigured, authErrorMessage, isSignupOpen } from '../src/lib/supabase';
 import { LineChart, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
 import InstallPrompt from './InstallPrompt';
 import { shortVersion } from '../src/version';
@@ -28,6 +28,14 @@ const Auth: React.FC<AuthProps> = ({ mode = 'login', onResetDone }) => {
   const isRegistering = view === 'register';
   const isRecovering = view === 'recover';
   const isResetting = view === 'reset';
+  // Si el registro está cerrado en Supabase, no se ofrece crear cuenta
+  const [signupOpen, setSignupOpen] = useState(true);
+  useEffect(() => {
+    let alive = true;
+    isSignupOpen().then(open => { if (alive) setSignupOpen(open); });
+    return () => { alive = false; };
+  }, []);
+
   const go = (v: View) => { setView(v); setError(''); setSuccess(''); };
 
   // La sesión la recoge App con onAuthStateChange: aquí solo se llama a Supabase
@@ -173,10 +181,12 @@ const Auth: React.FC<AuthProps> = ({ mode = 'login', onResetDone }) => {
                 <button onClick={() => go('login')} className="text-slate-500 hover:text-white text-[11px] font-black uppercase tracking-widest transition-all">
                   Volver al Acceso
                 </button>
-              ) : (
+              ) : (signupOpen || isRegistering) ? (
                 <button onClick={() => go(isRegistering ? 'login' : 'register')} className="text-slate-500 hover:text-white text-[11px] font-black uppercase tracking-widest transition-all">
                   {isRegistering ? '¿Ya tienes cuenta? Acceder' : '¿Eres nuevo? Crear Cuenta'}
                 </button>
+              ) : (
+                <p className="text-slate-600 text-[10px] font-bold uppercase tracking-widest">Registro cerrado · acceso solo por invitación</p>
               )}
             </div>
           )}

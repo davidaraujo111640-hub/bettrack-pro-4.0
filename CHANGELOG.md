@@ -6,6 +6,14 @@ El formato sigue [Versionado semántico](https://semver.org/lang/es/): **MAYOR.M
 - **MENOR** (1.0.1 → 1.1.0): funciones nuevas que no rompen nada de lo que ya había.
 - **MAYOR** (1.1.0 → 2.0.0): cambios grandes que obligan a los usuarios a hacer algo o cambian cómo se guardan los datos.
 
+## 1.1.3 · 8 oct 2026
+
+Registro cerrado: acceso solo por invitación.
+
+- Cuando el registro está cerrado en Supabase, la pantalla de acceso ya no ofrece "Crear cuenta" y avisa de que el acceso es solo por invitación. Si se vuelve a abrir, la opción reaparece sola.
+- El mensaje de "registro cerrado" sale en español.
+- Al abrir el enlace de una invitación, la app pide crear la contraseña (antes entraba sin contraseña y había que usar "¿Olvidaste tu contraseña?").
+
 ## 1.1.2 · 8 oct 2026
 
 Tipografías alojadas en la propia web.
