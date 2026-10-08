@@ -105,3 +105,12 @@ html {
 @media (prefers-reduced-motion: reduce) {
   .bt-sweep--play, .bt-badge-pop { animation: none; }
 }
+
+/* Con el zoom permitido, iOS acerca la pantalla al tocar un campo con letra menor de 16 px.
+   En pantallas táctiles los campos de texto usan 16 px para que no pase (salvo los de letra grande). */
+@media (pointer: coarse) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([class*='text-xl']):not([class*='text-2xl']):not([class*='text-3xl']),
+  textarea {
+    font-size: 16px !important;
+  }
+}

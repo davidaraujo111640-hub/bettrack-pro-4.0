@@ -96,23 +96,24 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, bets, userName, userPlan, 
   // Fix: Added explicit return type and properly typed accumulator to fix the 'unknown' error on toFixed
   const topPerformance = useMemo<{ name: string; profit: number } | null>(() => {
     const sports: Record<string, number> = {};
-    
+
     bets.forEach(b => {
       if (b.status !== BetStatus.PENDING) {
         sports[b.sport] = (sports[b.sport] || 0) + b.profit;
       }
     });
-    
+
     const entries = Object.entries(sports);
     if (entries.length === 0) return null;
-    
+
     const bestSport = entries.sort((a, b) => b[1] - a[1])[0];
     return { name: bestSport[0], profit: bestSport[1] };
   }, [bets]);
 
   const averageStake = useMemo(() => {
-    if (bets.length === 0) return 0;
-    return bets.reduce((acc, b) => acc + b.stake, 0) / bets.length;
+    const real = bets.filter(b => !b.freebet);
+    if (real.length === 0) return 0;
+    return real.reduce((acc, b) => acc + b.stake, 0) / real.length;
   }, [bets]);
 
   const averageStakePercent = useMemo(() => {
@@ -133,7 +134,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, bets, userName, userPlan, 
   }, [chartData]);
 
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, ease: "easeOut" }}
@@ -157,7 +158,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, bets, userName, userPlan, 
                   <Activity size={12} className="hidden md:block" /> CENTRAL DE OPERACIONES
                 </span>
               </div>
-              
+
               {/* Casas y perfil en móvil (en escritorio están en la barra lateral) */}
               <div className="md:hidden flex items-center gap-2">
                 {syncState && (
@@ -178,7 +179,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, bets, userName, userPlan, 
                 >
                   <Landmark size={18} />
                 </Link>
-                <button 
+                <button
                   onClick={onProfileClick}
                   aria-label="Mi perfil"
                   className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10 transition-all border border-white/5 active:scale-90"
@@ -189,8 +190,8 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, bets, userName, userPlan, 
             </div>
             <h2 className="text-3xl md:text-4xl font-black tracking-tighter text-white mt-1">Hola, <span className="text-[#ffcc00]">{userName || 'Usuario'}</span></h2>
         </motion.div>
-        
-        <motion.div 
+
+        <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.3 }}
@@ -219,8 +220,8 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, bets, userName, userPlan, 
                     }
 
                     return (
-                        <motion.div 
-                          key={i} 
+                        <motion.div
+                          key={i}
                           whileHover={{ scale: 1.1 }}
                           className={`w-9 h-9 rounded-xl flex items-center justify-center border transition-all ${colorClass}`}
                         >
@@ -234,16 +235,16 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, bets, userName, userPlan, 
 
       {/* Grid Principal: KPIs Maestros */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 px-4 md:px-0">
-        
+
         {/* Card Principal: Profit & ROI */}
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.4 }}
           className="lg:col-span-8 glass-panel rounded-[2rem] md:rounded-[2.5rem] p-6 md:p-10 relative overflow-hidden border-white/5 group"
         >
            <div className={`absolute -right-10 -top-10 w-64 h-64 blur-[80px] rounded-full opacity-20 transition-all duration-700 group-hover:opacity-30 ${stats.totalProfit >= 0 ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
-           
+
            <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
               <div>
                 <span className="text-slate-500 font-black uppercase tracking-widest text-[9px] flex items-center gap-2">
@@ -292,7 +293,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, bets, userName, userPlan, 
         </motion.div>
 
         {/* Card Bankroll: Progreso */}
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.5 }}
@@ -302,13 +303,13 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, bets, userName, userPlan, 
                 <span className="text-slate-500 font-black uppercase tracking-widest text-[9px]">Banca Disponible</span>
                 <p className="text-4xl md:text-5xl font-black text-white mt-1 tracking-tighter">{stats.currentBankroll.toFixed(1)}€</p>
            </div>
-           
+
            <div className="relative py-8 flex flex-col items-center">
                 {/* Visual simple de progreso */}
                 <div className="w-full h-4 bg-zinc-900 rounded-full overflow-hidden mt-4 border border-white/5 p-1">
-                    <motion.div 
+                    <motion.div
                         initial={{ width: 0 }}
-                        animate={{ width: `${Math.min(100, (stats.currentBankroll / (stats.initialBankroll * 2)) * 100)}%` }}
+                        animate={{ width: `${stats.initialBankroll > 0 ? Math.min(100, Math.max(0, (stats.currentBankroll / (stats.initialBankroll * 2)) * 100)) : 0}%` }}
                         transition={{ duration: 1.5, ease: "circOut" }}
                         className="h-full bg-gradient-to-r from-[#e2001a] to-[#ffcc00] rounded-full shadow-[0_0_20px_rgba(226,0,26,0.4)]"
                     ></motion.div>
@@ -326,7 +327,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, bets, userName, userPlan, 
                 <div>
                     <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Crecimiento</p>
                     <p className={`text-xl font-black ${stats.totalProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {((stats.totalProfit / stats.initialBankroll) * 100).toFixed(1)}%
+                        {(stats.initialBankroll > 0 ? (stats.totalProfit / stats.initialBankroll) * 100 : 0).toFixed(1)}%
                     </p>
                 </div>
            </div>
@@ -336,7 +337,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, bets, userName, userPlan, 
       {/* Sección Inferior: Gráfico y Pendientes */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 px-4 md:px-0">
         {/* Curva de Rendimiento */}
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.6 }}
@@ -346,15 +347,15 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, bets, userName, userPlan, 
                 <h3 className="text-xs md:text-sm font-black text-white uppercase tracking-widest italic flex items-center gap-2">
                   <Activity size={14} className="text-[#e2001a]" /> Curva de Profit
                 </h3>
-                
+
                 <div className="flex bg-zinc-950 p-1 rounded-xl border border-white/5 self-start sm:self-center">
                   {periods.map((p) => (
                     <button
                       key={p.id}
                       onClick={() => setChartPeriod(p.id)}
                       className={`px-3 py-1.5 rounded-lg text-[9px] md:text-[10px] font-black uppercase transition-all ${
-                        chartPeriod === p.id 
-                          ? 'bg-[#e2001a] text-white shadow-lg shadow-red-900/20' 
+                        chartPeriod === p.id
+                          ? 'bg-[#e2001a] text-white shadow-lg shadow-red-900/20'
                           : 'text-zinc-500 hover:text-white hover:bg-white/5'
                       }`}
                     >
@@ -375,18 +376,18 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, bets, userName, userPlan, 
                     <CartesianGrid strokeDasharray="10 10" stroke="#ffffff03" vertical={false} />
                     <XAxis dataKey="date" stroke="#525252" fontSize={9} tickLine={false} axisLine={false} fontWeight="900" />
                     <YAxis stroke="#525252" fontSize={9} tickLine={false} axisLine={false} tickFormatter={(val) => `${val}€`} fontWeight="900" />
-                    <Tooltip 
+                    <Tooltip
                         cursor={{ stroke: '#ffffff10', strokeWidth: 2 }}
                         content={<CustomTooltip />}
                     />
                     <ReferenceLine y={0} stroke="#ffffff10" />
-                    <Area 
-                        type="monotone" 
-                        dataKey="cumulativeProfit" 
-                        strokeWidth={4} 
-                        stroke="#10b981" 
-                        fill="url(#splitColor)" 
-                        animationDuration={2500} 
+                    <Area
+                        type="monotone"
+                        dataKey="cumulativeProfit"
+                        strokeWidth={4}
+                        stroke="#10b981"
+                        fill="url(#splitColor)"
+                        animationDuration={2500}
                         activeDot={{ r: 7, fill: '#10b981', stroke: '#000', strokeWidth: 4 }}
                     />
                 </AreaChart>
@@ -396,7 +397,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, bets, userName, userPlan, 
 
         {/* Sidebar de Apuestas Pendientes */}
         <div className="lg:col-span-4 flex flex-col gap-5">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.7 }}
@@ -408,12 +409,12 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, bets, userName, userPlan, 
                     </h3>
                     <span className="bg-blue-500/10 text-blue-400 px-3 py-1 rounded-xl text-[9px] font-black uppercase border border-blue-500/20">{stats.activeBets} Activas</span>
                 </div>
-                
+
                 <div className="space-y-4">
                     <AnimatePresence mode="popLayout">
                       {pendingBets.length > 0 ? pendingBets.map((bet, idx) => (
-                          <motion.div 
-                            key={bet.id} 
+                          <motion.div
+                            key={bet.id}
                             initial={{ opacity: 0, x: 10 }}
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ delay: 0.8 + (idx * 0.1) }}
@@ -437,7 +438,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, bets, userName, userPlan, 
                       )}
                     </AnimatePresence>
                 </div>
-                
+
                 {stats.activeBets > 3 && (
                     <button className="w-full mt-6 text-[9px] font-black text-[#e2001a] uppercase tracking-widest hover:text-white transition-all flex items-center justify-center gap-2">
                       Ver todas las activas <Zap size={10} />
@@ -445,7 +446,7 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, bets, userName, userPlan, 
                 )}
             </motion.div>
 
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.9 }}

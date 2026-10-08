@@ -29,11 +29,6 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
-  // Sync name state when user prop changes
-  React.useEffect(() => {
-    setName(user.name);
-  }, [user.name]);
-
   if (!isOpen) return null;
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
@@ -116,9 +111,9 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
 
               <div className="space-y-2">
                 <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Nombre Completo</label>
-                <input 
+                <input
                   type="text"
-                  className="w-full bg-zinc-900 border border-white/5 rounded-xl px-4 py-3 text-xs text-white font-bold outline-none focus:border-[#e2001a] transition-all" 
+                  className="w-full bg-zinc-900 border border-white/5 rounded-xl px-4 py-3 text-xs text-white font-bold outline-none focus:border-[#e2001a] transition-all"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                 />
@@ -130,7 +125,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
                 }`}>
                   {user.plan} MEMBER
                 </span>
-                <button 
+                <button
                   type="submit"
                   disabled={saving}
                   className="disabled:opacity-50 px-6 py-2 bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl text-[9px] font-black text-white uppercase tracking-widest transition-all"
@@ -147,7 +142,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
               </div>
 
               {!isChangingPassword ? (
-                <button 
+                <button
                   onClick={() => { setIsChangingPassword(true); setError(''); }}
                   className="w-full p-5 bg-white/5 hover:bg-white/10 border border-white/5 rounded-2xl flex items-center justify-between group transition-all"
                 >
@@ -163,30 +158,30 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
                 <form onSubmit={handlePasswordChange} className="space-y-4 animate-in slide-in-from-top-4 duration-300">
                   <div className="space-y-2">
                     <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Contraseña Actual</label>
-                    <input 
+                    <input
                       type="password"
-                      className="w-full bg-zinc-900 border border-white/5 rounded-2xl px-5 py-4 text-white font-bold outline-none focus:border-[#e2001a] transition-all" 
-                      placeholder="••••••••" 
+                      className="w-full bg-zinc-900 border border-white/5 rounded-2xl px-5 py-4 text-white font-bold outline-none focus:border-[#e2001a] transition-all"
+                      placeholder="••••••••"
                       value={currentPassword}
                       onChange={(e) => setCurrentPassword(e.target.value)}
                     />
                   </div>
                   <div className="space-y-2">
                     <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Nueva Contraseña</label>
-                    <input 
+                    <input
                       type="password"
-                      className="w-full bg-zinc-900 border border-white/5 rounded-2xl px-5 py-4 text-white font-bold outline-none focus:border-[#e2001a] transition-all" 
-                      placeholder="••••••••" 
+                      className="w-full bg-zinc-900 border border-white/5 rounded-2xl px-5 py-4 text-white font-bold outline-none focus:border-[#e2001a] transition-all"
+                      placeholder="••••••••"
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
                     />
                   </div>
                   <div className="space-y-2">
                     <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Confirmar Nueva Contraseña</label>
-                    <input 
+                    <input
                       type="password"
-                      className="w-full bg-zinc-900 border border-white/5 rounded-2xl px-5 py-4 text-white font-bold outline-none focus:border-[#e2001a] transition-all" 
-                      placeholder="••••••••" 
+                      className="w-full bg-zinc-900 border border-white/5 rounded-2xl px-5 py-4 text-white font-bold outline-none focus:border-[#e2001a] transition-all"
+                      placeholder="••••••••"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                     />
@@ -199,14 +194,14 @@ const ProfileModal: React.FC<ProfileModalProps> = ({
                   )}
 
                   <div className="flex gap-3">
-                    <button 
+                    <button
                       type="submit"
                       disabled={saving}
                       className="disabled:opacity-50 flex-1 py-4 bg-[#e2001a] rounded-2xl text-[10px] font-black text-white hover:bg-red-500 transition-all uppercase tracking-widest"
                     >
                       Actualizar
                     </button>
-                    <button 
+                    <button
                       type="button"
                       onClick={() => { setIsChangingPassword(false); setError(''); }}
                       className="flex-1 py-4 bg-white/5 rounded-2xl text-[10px] font-black text-slate-400 hover:text-white transition-all uppercase tracking-widest"

@@ -1,6 +1,7 @@
-import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Bet, BetStatus, Bankroll, Bookmaker, LegStatus } from '../types';
 import { isParlay, LEG_STATUS_LABELS } from '../src/utils/parlay';
+import { isoWeek, parseLocalDate, todayLocal } from '../src/utils/dates';
 import { getSportIcon } from '../src/utils/icons';
 import { calculateYield, calculateProfit, parseDecimal, realStake, getPayout } from '../src/utils/betMath';
 import { downloadBetsCsv } from '../src/utils/exportCsv';
@@ -100,14 +101,16 @@ const BetRow: React.FC<BetRowProps> = React.memo(({ bet, visibleColumns, onUpdat
   // Destello al marcar como ganada (o al guardar): una franja que cruza la fila y un rebote del badge.
   // 'won' es verde; 'saved' es un destello neutro para apuestas guardadas que no están ganadas.
   const [flash, setFlash] = useState<{ kind: 'won' | 'saved'; n: number } | null>(null);
-  const prevStatus = useRef(bet.status);
-  useEffect(() => {
-    if (prevStatus.current !== BetStatus.WON && bet.status === BetStatus.WON) setFlash(f => ({ kind: 'won', n: (f?.n ?? 0) + 1 }));
-    prevStatus.current = bet.status;
-  }, [bet.status]);
-  useEffect(() => {
+  const [prevStatus, setPrevStatus] = useState(bet.status);
+  if (bet.status !== prevStatus) {
+    setPrevStatus(bet.status);
+    if (prevStatus !== BetStatus.WON && bet.status === BetStatus.WON) setFlash(f => ({ kind: 'won', n: (f?.n ?? 0) + 1 }));
+  }
+  const [prevJustSaved, setPrevJustSaved] = useState(!!justSaved);
+  if (!!justSaved !== prevJustSaved) {
+    setPrevJustSaved(!!justSaved);
     if (justSaved) setFlash(f => ({ kind: bet.status === BetStatus.WON ? 'won' : 'saved', n: (f?.n ?? 0) + 1 }));
-  }, [justSaved]); // eslint-disable-line react-hooks/exhaustive-deps
+  }
   useEffect(() => {
     if (!flash) return;
     const t = setTimeout(() => setFlash(null), CELEBRATION_MS);
@@ -151,7 +154,7 @@ const BetRow: React.FC<BetRowProps> = React.memo(({ bet, visibleColumns, onUpdat
             {bet.freebet && <span title="Freebet (apuesta gratis)" className="px-1.5 py-0.5 rounded-md bg-violet-500 text-white text-[9px] md:text-[10px] font-black tracking-wider shrink-0">FB</span>}
             {visibleColumns.date && (
               <span className="text-[8px] font-bold text-slate-500 uppercase tracking-tighter flex items-center gap-0.5 shrink-0 whitespace-nowrap">
-                <Calendar size={9} /> {new Date(bet.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
+                <Calendar size={9} /> {parseLocalDate(bet.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
               </span>
             )}
           </div>
@@ -339,20 +342,18 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bookmakers, bankrolls,
     if (grouping === 'NONE') return { 'Todas las apuestas': { bets: filteredBets, profit: quickStats.profit, stake: filteredBets.reduce((acc, b) => acc + (b.status !== BetStatus.PENDING ? realStake(b) : 0), 0) } };
 
     const groups: Record<string, { bets: Bet[]; profit: number; stake: number }> = {};
-    const sortedBets = [...filteredBets].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const sortedBets = [...filteredBets].sort((a, b) => b.date.localeCompare(a.date));
 
     sortedBets.forEach(bet => {
-      const date = new Date(bet.date);
+      const date = parseLocalDate(bet.date);
       let key = '';
 
       if (grouping === 'DAY') {
         key = date.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
         key = key.charAt(0).toUpperCase() + key.slice(1);
       } else if (grouping === 'WEEK') {
-        const firstDayOfYear = new Date(date.getFullYear(), 0, 1);
-        const pastDaysOfYear = (date.getTime() - firstDayOfYear.getTime()) / 86400000;
-        const weekNum = Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
-        key = `Semana ${weekNum} - ${date.getFullYear()}`;
+        const { week, year } = isoWeek(date);
+        key = `Semana ${week} - ${year}`;
       } else if (grouping === 'MONTH') {
         key = date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
         key = key.charAt(0).toUpperCase() + key.slice(1);
@@ -379,14 +380,14 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bookmakers, bankrolls,
   }, []);
 
   const handleExportCsv = useCallback(() => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = todayLocal();
     const safeName = activeBankrollName.replace(/[^\p{L}\p{N}]+/gu, '_');
     downloadBetsCsv(filteredBets, bankrolls, `BetTrack_${safeName}_${today}.csv`);
     setShowExportMenu(false);
   }, [filteredBets, bankrolls, activeBankrollName]);
 
   const handleExportAllCsv = useCallback(() => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = todayLocal();
     downloadBetsCsv(allBets, bankrolls, `BetTrack_Todas_${today}.csv`);
     setShowExportMenu(false);
   }, [allBets, bankrolls]);

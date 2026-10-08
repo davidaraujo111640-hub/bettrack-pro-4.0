@@ -16,7 +16,10 @@ import UpdatePrompt from './components/UpdatePrompt';
 import UserBadge from './components/UserBadge';
 import { Bet, BetStatus, BankrollStats, Bankroll, User, Bookmaker, LegStatus } from './types';
 import { defaultBookmakers, normalizeBookmakers } from './src/utils/defaultBookmakers';
-import { calculateProfit, calculateRoi, calculateYield, realStake } from './src/utils/betMath';
+import { calculateProfit, computeBetStats } from './src/utils/betMath';
+import { newId } from './src/utils/id';
+import { loadSanitized, sanitizeBankroll, sanitizeBet, sanitizeBookmaker } from './src/utils/sanitize';
+import { safeSetItem, STORAGE_ERROR_EVENT } from './src/utils/safeStorage';
 import { isParlay, resolveParlay, setLegStatus } from './src/utils/parlay';
 import { BackupData, downloadBackup, parseBackup } from './src/utils/backup';
 import { supabase, toAppUser } from './src/lib/supabase';
@@ -47,7 +50,6 @@ import {
   ListCheck,
   PieChart,
   Wallet,
-  Zap,
   Landmark,
   Globe,
   LogOut,
@@ -70,9 +72,9 @@ const App: React.FC = () => {
   const [bankrolls, setBankrolls] = useState<Bankroll[]>(() => {
     try {
       const saved = localStorage.getItem('bt_bankrolls');
-      return saved ? JSON.parse(saved) : [DEFAULT_BANKROLL];
+      return saved ? loadSanitized(saved, sanitizeBankroll) : [DEFAULT_BANKROLL];
     } catch (e) {
-      console.error("Error parsing bankrolls", e);
+      console.error("Error reading bankrolls", e);
       return [DEFAULT_BANKROLL];
     }
   });
@@ -80,7 +82,7 @@ const App: React.FC = () => {
   const [bookmakers, setBookmakers] = useState<Bookmaker[]>(() => {
     try {
       const saved = localStorage.getItem('bt_bookmakers');
-      if (saved) return normalizeBookmakers(JSON.parse(saved));
+      if (saved) return normalizeBookmakers(loadSanitized(saved, sanitizeBookmaker));
     } catch (e) {
       console.error("Error parsing bookmakers", e);
     }
@@ -90,10 +92,9 @@ const App: React.FC = () => {
   const [activeBankrollId, setActiveBankrollId] = useState<string>('all');
   const [bets, setBets] = useState<Bet[]>(() => {
     try {
-      const saved = localStorage.getItem('bet_track_bets');
-      return saved ? JSON.parse(saved) : [];
+      return loadSanitized(localStorage.getItem('bet_track_bets'), sanitizeBet);
     } catch (e) {
-      console.error("Error parsing bets", e);
+      console.error("Error reading bets", e);
       return [];
     }
   });
@@ -121,20 +122,32 @@ const App: React.FC = () => {
 
 
   useEffect(() => {
-    localStorage.setItem('bt_bankrolls', JSON.stringify(bankrolls));
+    safeSetItem('bt_bankrolls', JSON.stringify(bankrolls));
   }, [bankrolls]);
 
   useEffect(() => {
-    localStorage.setItem('bt_bookmakers', JSON.stringify(bookmakers));
+    safeSetItem('bt_bookmakers', JSON.stringify(bookmakers));
   }, [bookmakers]);
 
   useEffect(() => {
-    localStorage.setItem('bet_track_bets', JSON.stringify(bets));
+    safeSetItem('bet_track_bets', JSON.stringify(bets));
   }, [bets]);
 
   const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToast({ message, type });
   }, []);
+
+  // Si el dispositivo no deja guardar la copia local (almacenamiento lleno), se avisa una sola vez
+  useEffect(() => {
+    let warned = false;
+    const onStorageError = () => {
+      if (warned) return;
+      warned = true;
+      showToast('No se ha podido guardar una copia en este dispositivo (almacenamiento lleno). Descarga una copia de seguridad desde Bankrolls.', 'error');
+    };
+    window.addEventListener(STORAGE_ERROR_EVENT, onStorageError);
+    return () => window.removeEventListener(STORAGE_ERROR_EVENT, onStorageError);
+  }, [showToast]);
 
   useEffect(() => {
     // Restos del login antiguo (solo local), ya no se usan
@@ -170,11 +183,6 @@ const App: React.FC = () => {
     emptyData,
   });
 
-  // La imagen compartida solo vale para la ventana que se abrió con ella
-  useEffect(() => {
-    if (!isAddModalOpen) setSharedImage(null);
-  }, [isAddModalOpen]);
-
   // Compartir desde otra app: el service worker deja la imagen en una caché; en cuanto la sesión y los datos
   // están listos, se abre "Nueva apuesta" con ella. Si lo compartido no era una imagen, se avisa.
   useEffect(() => {
@@ -186,6 +194,7 @@ const App: React.FC = () => {
       const query = params.toString();
       window.history.replaceState(null, '', window.location.pathname + (query ? '?' + query : '') + window.location.hash);
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- aviso único al llegar desde el menú Compartir sin imagen
     if (share === 'other') showToast('Solo se pueden leer imágenes. Comparte la captura de la apuesta.', 'info');
     if (!('caches' in window)) return;
     takeSharedImage(caches).then(file => {
@@ -205,24 +214,21 @@ const App: React.FC = () => {
   }, [bets, activeBankrollId, bankrolls]);
 
   const stats = useMemo<BankrollStats>(() => {
-    const closedBets = filteredBets.filter(b => b.status !== BetStatus.PENDING);
-    const totalProfit = closedBets.reduce((acc, b) => acc + b.profit, 0);
-    const totalStake = closedBets.reduce((acc, b) => acc + realStake(b), 0);
-    const wonBets = closedBets.filter(b => b.status === BetStatus.WON || (b.status === BetStatus.CASH_OUT && b.profit > 0)).length;
-
     const initialCap = activeBankrollId === 'all'
       ? bankrolls.filter(b => !b.archived).reduce((acc, b) => acc + b.initialCapital, 0)
       : (bankrolls.find(b => b.id === activeBankrollId)?.initialCapital || 0);
 
+    // Misma fórmula que la pantalla Estadísticas: las anuladas y reembolsadas no cuentan para el yield ni el acierto
+    const detailed = computeBetStats(filteredBets, initialCap);
     return {
-      totalProfit,
-      roi: calculateRoi(totalProfit, initialCap),
-      yield: calculateYield(totalProfit, totalStake),
-      winRate: closedBets.length > 0 ? (wonBets / closedBets.length) * 100 : 0,
-      totalBets: filteredBets.length,
-      activeBets: filteredBets.filter(b => b.status === BetStatus.PENDING).length,
+      totalProfit: detailed.profit,
+      roi: detailed.roi,
+      yield: detailed.yield,
+      winRate: detailed.winRate,
+      totalBets: detailed.total,
+      activeBets: detailed.pending,
       initialBankroll: initialCap,
-      currentBankroll: initialCap + totalProfit
+      currentBankroll: initialCap + detailed.profit
     };
   }, [filteredBets, activeBankrollId, bankrolls]);
 
@@ -243,7 +249,7 @@ const App: React.FC = () => {
       setBankrolls(prev => [...prev, defaultBankroll]);
     }
 
-    const savedId = editingBet ? editingBet.id : crypto.randomUUID();
+    const savedId = editingBet ? editingBet.id : newId();
     setBets(prevBets => {
       if (editingBet) {
         return prevBets.map(b => b.id === editingBet.id ? { ...betData, id: editingBet.id, profit } : b);
@@ -357,12 +363,27 @@ const App: React.FC = () => {
     setIsLogoutConfirmOpen(true);
   }, []);
 
-  const confirmLogout = useCallback(() => {
-    supabase.auth.signOut();
-    setUser(null);
+  // El cuadro de confirmación avisa de que se pierden los datos asociados: se borran también sus apuestas
+  const handleDeleteBankroll = useCallback((id: string) => {
+    setBankrolls(prev => prev.filter(b => b.id !== id));
+    setBets(prev => prev.filter(b => b.bankrollId !== id));
+    setActiveBankrollId(current => (current === id ? 'all' : current));
+  }, []);
+
+  const { prepareLogout, discardLocal } = cloud;
+  const confirmLogout = useCallback(async () => {
     setIsLogoutConfirmOpen(false);
-    showToast('Sesión cerrada correctamente', 'info');
-  }, [showToast]);
+    // Se sube lo pendiente y, si todo está ya en la nube, se borran los datos de este dispositivo
+    // (así nadie que use después este móvil u ordenador ve tus apuestas)
+    const synced = await prepareLogout();
+    if (synced) {
+      discardLocal();
+      setLocalBackup(null);
+    }
+    void supabase.auth.signOut();
+    setUser(null);
+    showToast(synced ? 'Sesión cerrada correctamente' : 'Sesión cerrada. Había cambios sin subir y se han conservado en este dispositivo.', 'info');
+  }, [prepareLogout, discardLocal, showToast]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -414,7 +435,13 @@ const App: React.FC = () => {
   }
 
   if (!user) {
-    return <Auth />;
+    return (
+      <>
+        <Auth />
+        {/* Los avisos (por ejemplo, el de cerrar sesión) también se ven en la pantalla de acceso */}
+        {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      </>
+    );
   }
 
   if (cloud.status === 'loading' || cloud.status === 'idle') {
@@ -592,7 +619,7 @@ const App: React.FC = () => {
               <Route path="/" element={<Dashboard stats={stats} bets={filteredBets} userName={user?.name} userPlan={user?.plan} onProfileClick={() => setIsProfileModalOpen(true)} syncState={cloud.syncState} onSyncClick={() => showToast(cloud.syncState === 'synced' ? 'Guardado en la nube' : cloud.syncState === 'pending' ? 'Sincronizando…' : 'Sin conexión: los cambios se subirán al volver internet', cloud.syncState === 'offline' ? 'info' : 'success')} />} />
               <Route path="/bets" element={<BetList bets={filteredBets} allBets={bets} bookmakers={bookmakers} bankrolls={bankrolls} activeBankrollName={activeBankrollName} onDelete={handleDeleteBet} onUpdateStatus={handleUpdateStatus} onEdit={handleEdit} onUpdateLeg={handleUpdateLeg} justSavedId={justSavedId} />} />
               <Route path="/statistics" element={<Statistics bets={filteredBets} stats={stats} bankrolls={bankrolls} activeBankrollId={activeBankrollId} onSelectBankroll={handleSetActiveBankroll} />} />
-              <Route path="/bankrolls" element={<BankrollManager bankrolls={bankrolls} bets={bets} onUpdate={setBankrolls} activeBankrollId={activeBankrollId} onSelect={handleSetActiveBankroll} onExportBackup={handleExportBackup} onImportBackup={handleImportBackupFile} localBackup={localBackup ? { bets: localBackup.bets.length, bankrolls: localBackup.bankrolls.length } : null} onRestoreLocalBackup={handleRestoreLocalBackup} onDownloadLocalBackup={handleDownloadLocalBackup} />} />
+              <Route path="/bankrolls" element={<BankrollManager bankrolls={bankrolls} bets={bets} onUpdate={setBankrolls} onDeleteBankroll={handleDeleteBankroll} activeBankrollId={activeBankrollId} onSelect={handleSetActiveBankroll} onExportBackup={handleExportBackup} onImportBackup={handleImportBackupFile} localBackup={localBackup ? { bets: localBackup.bets.length, bankrolls: localBackup.bankrolls.length } : null} onRestoreLocalBackup={handleRestoreLocalBackup} onDownloadLocalBackup={handleDownloadLocalBackup} />} />
               <Route path="/bookmakers" element={<BookmakerManager bookmakers={bookmakers} onUpdate={setBookmakers} />} />
             </Routes>
           </div>
@@ -610,6 +637,7 @@ const App: React.FC = () => {
             recentBookmakers={recentBookmakers}
             recentSports={recentSports}
             sharedImage={sharedImage}
+            onSharedImageUsed={() => setSharedImage(null)}
           />
         )}
 

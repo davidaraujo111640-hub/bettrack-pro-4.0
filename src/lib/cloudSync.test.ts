@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { BetStatus, type Bet } from '../../types';
-import { applyRemote, diffSnapshot, mergeQueue, planLoad, rowsToData, stableStringify, toSnapshot, type CloudData } from './cloudSync';
+import { applyRemote, diffSnapshot, mergeQueue, orderLike, planLoad, reconcileRemote, rowsToData, sortBankrolls, stableStringify, toSnapshot, type CloudData } from './cloudSync';
 
 const bet = (id: string, extra: Partial<Bet> = {}): Bet => ({
   id, bankrollId: 'default', date: '2026-10-01', bookmaker: 'Bet365', sport: 'Fútbol',
@@ -88,5 +88,98 @@ describe('planLoad', () => {
 
   it('si el navegador ya era de esta cuenta, no pregunta otra vez', () => {
     expect(planLoad({ owner: 'u1', localBets: 200, cloudBets: 0, cloudBankrolls: 1 })).toBe('use-cloud');
+  });
+});
+
+describe('reconcileRemote', () => {
+  const none = new Set<string>();
+  const run = (local: CloudData, cloud: CloudData, pending = none, snapshot = toSnapshot(local)) =>
+    reconcileRemote({ local, cloud, snapshot, pending });
+
+  it('sin diferencias no cambia nada', () => {
+    const d = data([bet('1'), bet('2')]);
+    const r = run(d, structuredClone(d));
+    expect(r.changed).toBe(false);
+    expect(r.data.bets).toHaveLength(2);
+  });
+
+  it('trae los cambios hechos desde otro dispositivo (edición, alta y borrado)', () => {
+    const local = data([bet('1'), bet('2'), bet('3')]);
+    const cloud = data([bet('1', { status: BetStatus.WON, profit: 10 }), bet('3'), bet('4', { date: '2026-10-09' })]);
+    const r = run(local, cloud);
+    expect(r.changed).toBe(true);
+    expect(r.data.bets.map(b => b.id).sort()).toEqual(['1', '3', '4']);
+    expect(r.data.bets.find(b => b.id === '1')!.status).toBe(BetStatus.WON);
+    expect(r.data.bets[0].id).toBe('4'); // la más reciente va primera
+    expect(r.snapshot).toEqual(toSnapshot(r.data));
+  });
+
+  it('lo que tiene cambios propios pendientes de subir manda lo local', () => {
+    const local = data([bet('1', { description: 'mi edición' })]);
+    const cloud = data([bet('1', { description: 'versión vieja de la nube' })]);
+    const r = run(local, cloud, new Set(['bet:1']));
+    expect(r.data.bets[0].description).toBe('mi edición');
+  });
+
+  it('no resucita una apuesta que he borrado y aún no se ha subido el borrado', () => {
+    const local = data([]);
+    const cloud = data([bet('1')]);
+    const r = run(local, cloud, new Set(['bet:1']), {});
+    expect(r.data.bets).toHaveLength(0);
+  });
+
+  it('conserva una apuesta local nueva que aún no consta en la nube', () => {
+    const local = data([bet('nueva')]);
+    const r = run(local, data([]), none, {});
+    expect(r.data.bets.map(b => b.id)).toEqual(['nueva']);
+  });
+
+  it('mantiene el orden local de los bankrolls y añade los nuevos al final', () => {
+    const a = { id: 'a', name: 'A', initialCapital: 1, color: '#000' };
+    const b = { id: 'b', name: 'B', initialCapital: 1, color: '#000' };
+    const c = { id: 'c', name: 'C', initialCapital: 1, color: '#000' };
+    const local: CloudData = { bets: [], bankrolls: [b, a], bookmakers: [] };
+    const cloud: CloudData = { bets: [], bankrolls: [a, b, c], bookmakers: [] };
+    expect(run(local, cloud).data.bankrolls.map(x => x.id)).toEqual(['b', 'a', 'c']);
+  });
+});
+
+describe('orderLike', () => {
+  it('sigue el orden de la referencia y deja lo nuevo al final', () => {
+    const item = (id: string) => ({ id });
+    expect(orderLike([item('a'), item('b'), item('c')], [item('c'), item('a')]).map(x => x.id)).toEqual(['c', 'a', 'b']);
+  });
+});
+
+describe('rowsToData con datos dañados', () => {
+  it('ignora lo dañado y conserva lo demás', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const d = rowsToData([
+      { kind: 'bet', id: 'ok', data: bet('ok') },
+      { kind: 'bet', id: 'roto', data: { id: 'roto', odds: 'x' } },
+      { kind: 'bet', id: 'nulo', data: null },
+      { kind: 'bankroll', id: 'sin-id', data: { name: 'sin id' } },
+      { kind: 'bookmaker', id: 'b', data: { id: 'b', name: 'Bet365' } },
+    ]);
+    expect(d.bets.map(b => b.id)).toEqual(['ok']);
+    expect(d.bankrolls).toHaveLength(0);
+    expect(d.bookmakers).toHaveLength(1);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+});
+
+describe('sortBankrolls', () => {
+  const bank = (id: string, createdAt?: number) => ({ id, name: id, initialCapital: 1, color: '#000', ...(createdAt ? { createdAt } : {}) });
+
+  it('los más antiguos primero; los anteriores a esta versión conservan su orden', () => {
+    const cloud = [bank('nuevo', 300), bank('b'), bank('a'), bank('medio', 200)];
+    const reference = [bank('a'), bank('b')];
+    expect(sortBankrolls(cloud, reference).map(x => x.id)).toEqual(['a', 'b', 'medio', 'nuevo']);
+  });
+
+  it('es estable: el mismo resultado sin importar el orden de entrada', () => {
+    const items = [bank('x', 5), bank('y', 5), bank('z', 5)];
+    expect(sortBankrolls([...items].reverse(), []).map(b => b.id)).toEqual(sortBankrolls(items, []).map(b => b.id));
   });
 });

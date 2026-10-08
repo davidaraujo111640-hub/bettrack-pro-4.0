@@ -44,3 +44,33 @@ function readAsBase64(blob: Blob): Promise<string> {
     reader.readAsDataURL(blob);
   });
 }
+
+/** Lado más largo de los iconos de casas subidos por el usuario (se muestran a unos 40 px) */
+export const MAX_ICON_SIDE = 192;
+/** Peso máximo del archivo que se acepta como icono, antes de reducirlo */
+export const MAX_ICON_FILE_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Reduce una imagen subida como icono y la devuelve como dato PNG (conserva la transparencia).
+ * Sin esto, una foto de varios MB acabaría en el almacenamiento del dispositivo y en la nube.
+ * Lanza un error con un mensaje para el usuario si el archivo no vale.
+ */
+export async function resizeToIconDataUrl(file: Blob): Promise<string> {
+  if (!file.type.startsWith('image/')) throw new Error('El archivo no es una imagen.');
+  if (file.size > MAX_ICON_FILE_BYTES) throw new Error('La imagen pesa demasiado (máximo 8 MB).');
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(file);
+  } catch {
+    throw new Error('No se ha podido leer la imagen. Prueba con otra (PNG, JPG o WEBP).');
+  }
+  const { width, height } = fitSize(bitmap.width, bitmap.height, MAX_ICON_SIDE);
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('No se ha podido procesar la imagen.');
+  ctx.drawImage(bitmap, 0, 0, width, height);
+  bitmap.close?.();
+  return canvas.toDataURL('image/png');
+}

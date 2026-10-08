@@ -1,17 +1,18 @@
 
 import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bankroll, Bet, BetStatus } from '../types';
-import { calculateYield, realStake } from '../src/utils/betMath';
-import { 
-  Archive, 
-  PackageOpen, 
-  FileUp, 
-  FileDown, 
-  Check, 
-  Globe, 
-  Edit2, 
-  Trash2, 
+import { Bankroll, Bet } from '../types';
+import { computeBetStats } from '../src/utils/betMath';
+import { newId } from '../src/utils/id';
+import {
+  Archive,
+  PackageOpen,
+  FileUp,
+  FileDown,
+  Check,
+  Globe,
+  Edit2,
+  Trash2,
   AlertTriangle,
   ArchiveRestore
 } from 'lucide-react';
@@ -24,13 +25,15 @@ interface BankrollManagerProps {
   onSelect: (id: string) => void;
   onExportBackup: () => void;
   onImportBackup: (file: File) => void;
+  /** Borra el bankroll y todas sus apuestas */
+  onDeleteBankroll: (id: string) => void;
   /** Datos de este dispositivo anteriores a la cuenta que la app guardó por seguridad */
   localBackup?: { bets: number; bankrolls: number } | null;
   onRestoreLocalBackup?: () => void;
   onDownloadLocalBackup?: () => void;
 }
 
-const BankrollManager: React.FC<BankrollManagerProps> = ({ bankrolls, bets, activeBankrollId, onUpdate, onSelect, onExportBackup, onImportBackup, localBackup, onRestoreLocalBackup, onDownloadLocalBackup }) => {
+const BankrollManager: React.FC<BankrollManagerProps> = ({ bankrolls, bets, activeBankrollId, onUpdate, onSelect, onExportBackup, onImportBackup, onDeleteBankroll, localBackup, onRestoreLocalBackup, onDownloadLocalBackup }) => {
   const navigate = useNavigate();
   const [isAdding, setIsAdding] = useState(false);
   const [editingBank, setEditingBank] = useState<Bankroll | null>(null);
@@ -44,24 +47,22 @@ const BankrollManager: React.FC<BankrollManagerProps> = ({ bankrolls, bets, acti
   const getBankrollStats = (bankrollId: string) => {
     const activeBankrolls = bankrolls.filter(b => !b.archived);
     const activeIds = new Set(activeBankrolls.map(b => b.id));
-    
-    const bankrollBets = bankrollId === 'all' 
-      ? bets.filter(b => activeIds.has(b.bankrollId)) 
+
+    const bankrollBets = bankrollId === 'all'
+      ? bets.filter(b => activeIds.has(b.bankrollId))
       : bets.filter(b => b.bankrollId === bankrollId);
-      
-    const closedBets = bankrollBets.filter(b => b.status !== BetStatus.PENDING);
-    const profit = closedBets.reduce((acc, bet) => acc + (bet.profit || 0), 0);
-    const totalStake = closedBets.reduce((acc, bet) => acc + (realStake(bet) || 0), 0);
-    
-    const initial = bankrollId === 'all' 
+
+    const initial = bankrollId === 'all'
       ? activeBankrolls.reduce((acc, b) => acc + b.initialCapital, 0)
       : bankrolls.find(b => b.id === bankrollId)?.initialCapital || 0;
-    
+
+    // Misma fórmula que Inicio y Estadísticas: las anuladas y reembolsadas no cuentan para el yield
+    const detailed = computeBetStats(bankrollBets, initial);
     return {
       initial,
-      profit,
-      current: initial + profit,
-      yield: calculateYield(profit, totalStake)
+      profit: detailed.profit,
+      current: initial + detailed.profit,
+      yield: detailed.yield
     };
   };
 
@@ -72,7 +73,7 @@ const BankrollManager: React.FC<BankrollManagerProps> = ({ bankrolls, bets, acti
 
   const handleAdd = () => {
     if (!newBank.name) return;
-    onUpdate([...bankrolls, { id: Math.random().toString(36).substr(2, 9), ...newBank, color: '#e2001a', archived: false }]);
+    onUpdate([...bankrolls, { id: newId(), ...newBank, color: '#e2001a', archived: false, createdAt: Date.now() }]);
     setIsAdding(false);
     setNewBank({ name: '', initialCapital: 1000 });
   };
@@ -90,8 +91,7 @@ const BankrollManager: React.FC<BankrollManagerProps> = ({ bankrolls, bets, acti
 
   const confirmDelete = () => {
     if (!bankToDelete || confirmText.toLowerCase() !== 'eliminar') return;
-    onUpdate(bankrolls.filter(b => b.id !== bankToDelete));
-    if (activeBankrollId === bankToDelete) onSelect('all');
+    onDeleteBankroll(bankToDelete);
     setBankToDelete(null);
     setConfirmText('');
   };
@@ -126,29 +126,29 @@ const BankrollManager: React.FC<BankrollManagerProps> = ({ bankrolls, bets, acti
           <h2 className="text-3xl md:text-4xl font-black tracking-tight text-white uppercase italic">Bankrolls</h2>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button 
-            onClick={() => setShowArchived(!showArchived)} 
+          <button
+            onClick={() => setShowArchived(!showArchived)}
             className={`flex-1 sm:flex-none px-4 py-3 rounded-2xl font-black uppercase text-[10px] transition-all border ${
               showArchived ? 'bg-[#ffcc00] text-black border-[#ffcc00]' : 'bg-white/5 border-white/5 text-slate-400 hover:text-white'
             }`}
           >
-            {showArchived ? <PackageOpen className="w-4 h-4 mr-2 inline-block" /> : <Archive className="w-4 h-4 mr-2 inline-block" />} 
+            {showArchived ? <PackageOpen className="w-4 h-4 mr-2 inline-block" /> : <Archive className="w-4 h-4 mr-2 inline-block" />}
             {showArchived ? 'Activos' : 'Archivados'}
           </button>
-          <button 
-            onClick={() => fileInputRef.current?.click()} 
+          <button
+            onClick={() => fileInputRef.current?.click()}
             className="flex-1 sm:flex-none bg-white/5 border border-white/5 text-slate-400 px-4 py-3 rounded-2xl font-black uppercase text-[10px] hover:text-white transition-all"
           >
             <FileUp className="w-4 h-4 mr-2 inline-block" /> Importar
           </button>
-          <button 
+          <button
             onClick={onExportBackup}
             className="flex-1 sm:flex-none bg-white/5 border border-white/5 text-slate-400 px-4 py-3 rounded-2xl font-black uppercase text-[10px] hover:text-white transition-all"
           >
             <FileDown className="w-4 h-4 mr-2 inline-block" /> Backup
           </button>
-          <button 
-            onClick={() => setIsAdding(true)} 
+          <button
+            onClick={() => setIsAdding(true)}
             className="w-full sm:w-auto bg-[#e2001a] text-white px-6 py-3 rounded-2xl font-black uppercase text-xs hover:bg-[#c10016] transition-all shadow-lg shadow-red-900/20"
           >
             Añadir Nuevo
@@ -180,11 +180,11 @@ const BankrollManager: React.FC<BankrollManagerProps> = ({ bankrolls, bets, acti
         {!showArchived && (() => {
           const stats = getBankrollStats('all');
           return (
-            <button 
+            <button
               onClick={() => handleSelect('all')}
               className={`glass-panel rounded-[2rem] p-8 transition-all text-left flex flex-col relative group ${
-                activeBankrollId === 'all' 
-                  ? 'border-[#e2001a] ring-2 ring-[#e2001a]/20 bg-[#e2001a]/5' 
+                activeBankrollId === 'all'
+                  ? 'border-[#e2001a] ring-2 ring-[#e2001a]/20 bg-[#e2001a]/5'
                   : 'border-white/5 hover:border-white/20'
               }`}
             >
@@ -197,7 +197,7 @@ const BankrollManager: React.FC<BankrollManagerProps> = ({ bankrolls, bets, acti
                 <Globe className="w-6 h-6" />
               </div>
               <h3 className="text-xl font-black text-white">Global</h3>
-              
+
               <div className="grid grid-cols-3 gap-2 mt-6">
                 <div>
                   <p className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">Inicial</p>
@@ -216,7 +216,7 @@ const BankrollManager: React.FC<BankrollManagerProps> = ({ bankrolls, bets, acti
                   </p>
                 </div>
               </div>
-              
+
               <div className="mt-4 pt-4 border-t border-white/5">
                 <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Capital Actual</p>
                 <p className="text-3xl font-black text-white mt-1">{stats.current.toLocaleString()}€</p>
@@ -228,12 +228,12 @@ const BankrollManager: React.FC<BankrollManagerProps> = ({ bankrolls, bets, acti
         {visibleBankrolls.map(bank => {
           const stats = getBankrollStats(bank.id);
           return (
-            <div 
-              key={bank.id} 
+            <div
+              key={bank.id}
               onClick={() => handleSelect(bank.id)}
               className={`glass-panel rounded-[2rem] p-6 md:p-8 transition-all text-left flex flex-col relative group cursor-pointer ${
-                activeBankrollId === bank.id 
-                  ? 'border-[#e2001a] ring-2 ring-[#e2001a]/20 bg-[#e2001a]/5' 
+                activeBankrollId === bank.id
+                  ? 'border-[#e2001a] ring-2 ring-[#e2001a]/20 bg-[#e2001a]/5'
                   : 'border-white/5 hover:border-white/20'
               }`}
             >
@@ -244,21 +244,21 @@ const BankrollManager: React.FC<BankrollManagerProps> = ({ bankrolls, bets, acti
                   </div>
                 )}
                 <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-                  <button 
+                  <button
                     onClick={(e) => { e.stopPropagation(); setEditingBank(bank); }}
                     className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10"
                     title="Editar"
                   >
                     <Edit2 className="w-3 h-3" />
                   </button>
-                  <button 
+                  <button
                     onClick={(e) => handleArchive(bank.id, e)}
                     className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10"
                     title={bank.archived ? "Desarchivar" : "Archivar"}
                   >
                     {bank.archived ? <PackageOpen className="w-3 h-3" /> : <Archive className="w-3 h-3" />}
                   </button>
-                  <button 
+                  <button
                     onClick={(e) => handleDeleteClick(bank.id, e)}
                     className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10"
                     title="Eliminar"
@@ -271,7 +271,7 @@ const BankrollManager: React.FC<BankrollManagerProps> = ({ bankrolls, bets, acti
                 {bank.name.charAt(0)}
               </div>
               <h3 className={`text-lg md:text-xl font-black text-white ${bank.archived ? 'opacity-50' : ''}`}>{bank.name}</h3>
-              
+
               <div className="grid grid-cols-3 gap-1 md:gap-2 mt-4 md:mt-6">
                 <div>
                   <p className="text-[7px] md:text-[8px] text-slate-500 font-bold uppercase tracking-widest">Inicial</p>
@@ -290,7 +290,7 @@ const BankrollManager: React.FC<BankrollManagerProps> = ({ bankrolls, bets, acti
                   </p>
                 </div>
               </div>
-              
+
               <div className="mt-4 pt-4 border-t border-white/5">
                 <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Capital Actual</p>
                 <p className="text-2xl md:text-3xl font-black text-white mt-1">{stats.current.toLocaleString()}€</p>
@@ -354,9 +354,9 @@ const BankrollManager: React.FC<BankrollManagerProps> = ({ bankrolls, bets, acti
             </div>
             <h3 className="text-xl font-black text-white mb-2 uppercase">¿Eliminar Bankroll?</h3>
             <p className="text-slate-500 text-sm font-bold mb-6">
-              Escribe <span className="text-white">eliminar</span> para confirmar. Se perderán todos los datos asociados.
+              Escribe <span className="text-white">eliminar</span> para confirmar. Se borrarán también sus {bets.filter(b => b.bankrollId === bankToDelete).length} apuestas y no se puede deshacer.
             </p>
-            <input 
+            <input
               className="w-full bg-zinc-900 border border-white/10 rounded-2xl px-5 py-4 text-white font-bold outline-none focus:border-[#e2001a] mb-6 text-center uppercase tracking-widest text-xs"
               placeholder="Escribe eliminar"
               value={confirmText}
@@ -365,8 +365,8 @@ const BankrollManager: React.FC<BankrollManagerProps> = ({ bankrolls, bets, acti
             />
             <div className="flex gap-4">
               <button onClick={() => { setBankToDelete(null); setConfirmText(''); }} className="flex-1 py-4 text-xs font-black text-slate-500">CANCELAR</button>
-              <button 
-                onClick={confirmDelete} 
+              <button
+                onClick={confirmDelete}
                 disabled={confirmText.toLowerCase() !== 'eliminar'}
                 className="flex-1 py-4 bg-[#e2001a] rounded-2xl text-xs font-black text-white shadow-lg shadow-red-900/20 disabled:opacity-30 disabled:grayscale transition-all"
               >
@@ -388,7 +388,7 @@ const BankrollManager: React.FC<BankrollManagerProps> = ({ bankrolls, bets, acti
             <p className="text-slate-500 text-sm font-bold mb-6">
               Escribe <span className="text-white">archivar</span> para confirmar el cambio de estado.
             </p>
-            <input 
+            <input
               className="w-full bg-zinc-900 border border-white/10 rounded-2xl px-5 py-4 text-white font-bold outline-none focus:border-[#ffcc00] mb-6 text-center uppercase tracking-widest text-xs"
               placeholder="Escribe archivar"
               value={confirmText}
@@ -397,8 +397,8 @@ const BankrollManager: React.FC<BankrollManagerProps> = ({ bankrolls, bets, acti
             />
             <div className="flex gap-4">
               <button onClick={() => { setBankToArchive(null); setConfirmText(''); }} className="flex-1 py-4 text-xs font-black text-slate-500">CANCELAR</button>
-              <button 
-                onClick={confirmArchive} 
+              <button
+                onClick={confirmArchive}
                 disabled={confirmText.toLowerCase() !== 'archivar'}
                 className="flex-1 py-4 bg-[#ffcc00] text-black rounded-2xl text-xs font-black shadow-lg shadow-yellow-900/20 disabled:opacity-30 disabled:grayscale transition-all"
               >

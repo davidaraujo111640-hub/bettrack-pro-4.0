@@ -16,11 +16,11 @@ type AllowedMimeType = (typeof ALLOWED_MIME_TYPES)[number];
 // ~4 MB de imagen en base64 (Vercel limita el cuerpo de la petición a 4,5 MB)
 const MAX_BASE64_LENGTH = 5_500_000;
 
-// Límite de uso por IP. En Vercel la memoria es por instancia, así que es una
-// protección básica contra abusos, no un límite exacto.
+// Límite de uso por usuario (hay que haber iniciado sesión). En Vercel la memoria es por instancia,
+// así que es una protección básica contra abusos, no un límite exacto.
 const RATE_LIMIT_MAX = 10;
 const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
-const requestsByIp = new Map<string, number[]>();
+const requestsByUser = new Map<string, number[]>();
 
 // Estructura que Claude debe devolver. Con structured outputs la API garantiza
 // que la respuesta cumple este esquema (JSON válido, sin texto extra).
@@ -66,21 +66,58 @@ function getClient() {
 
 class MissingApiKeyError extends Error {}
 
-function getClientIp(req: Request): string {
-  const forwarded = req.headers["x-forwarded-for"];
-  const first = Array.isArray(forwarded) ? forwarded[0] : forwarded?.split(",")[0];
-  return first?.trim() || req.socket?.remoteAddress || "unknown";
+class AuthNotConfiguredError extends Error {}
+
+/** Extrae el token de la cabecera "Authorization: Bearer <token>" */
+export function bearerToken(header: unknown): string | null {
+  const value = Array.isArray(header) ? header[0] : header;
+  const match = typeof value === "string" ? /^Bearer\s+(\S+)$/i.exec(value) : null;
+  return match ? match[1] : null;
 }
 
-function isRateLimited(ip: string): boolean {
+// Un token ya comprobado se recuerda un minuto para no consultar a Supabase en cada captura
+const TOKEN_CACHE_MS = 60_000;
+const verifiedTokens = new Map<string, { userId: string; expires: number }>();
+
+/**
+ * Comprueba con Supabase que el token es de una sesión válida y devuelve el id del usuario (null si no lo es).
+ * Lanza AuthNotConfiguredError si el servidor no tiene las claves públicas de Supabase.
+ */
+export async function verifyUser(token: string, fetchImpl: typeof fetch = fetch): Promise<string | null> {
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const key = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+  if (!url || !key) throw new AuthNotConfiguredError();
+
   const now = Date.now();
-  const recent = (requestsByIp.get(ip) ?? []).filter(t => now - t < RATE_LIMIT_WINDOW_MS);
+  const cached = verifiedTokens.get(token);
+  if (cached && cached.expires > now) return cached.userId;
+
+  const response = await fetchImpl(`${url}/auth/v1/user`, { headers: { apikey: key, Authorization: `Bearer ${token}` } });
+  if (!response.ok) return null;
+  const user = (await response.json()) as { id?: unknown };
+  if (typeof user.id !== "string" || !user.id) return null;
+
+  if (verifiedTokens.size > 500) {
+    for (const [t, v] of verifiedTokens) if (v.expires <= now) verifiedTokens.delete(t);
+    if (verifiedTokens.size > 500) verifiedTokens.clear();
+  }
+  verifiedTokens.set(token, { userId: user.id, expires: now + TOKEN_CACHE_MS });
+  return user.id;
+}
+
+function isRateLimited(userId: string): boolean {
+  const now = Date.now();
+  const recent = (requestsByUser.get(userId) ?? []).filter(t => now - t < RATE_LIMIT_WINDOW_MS);
   if (recent.length >= RATE_LIMIT_MAX) {
-    requestsByIp.set(ip, recent);
+    requestsByUser.set(userId, recent);
     return true;
   }
   recent.push(now);
-  requestsByIp.set(ip, recent);
+  requestsByUser.set(userId, recent);
+  // Evita que el mapa crezca sin límite
+  if (requestsByUser.size > 2000) {
+    for (const [id, times] of requestsByUser) if (times.every(t => now - t >= RATE_LIMIT_WINDOW_MS)) requestsByUser.delete(id);
+  }
   return false;
 }
 
@@ -90,7 +127,26 @@ export default async function handler(req: Request, res: Response) {
     return res.status(405).json({ error: "Método no permitido" });
   }
 
-  if (isRateLimited(getClientIp(req))) {
+  // Solo pueden usarla quienes tengan sesión iniciada: así nadie ajeno gasta el crédito de la IA
+  const token = bearerToken(req.headers?.authorization);
+  if (!token) {
+    return res.status(401).json({ error: "Inicia sesión para usar la lectura de capturas con IA." });
+  }
+  let userId: string | null;
+  try {
+    userId = await verifyUser(token);
+  } catch (error) {
+    if (error instanceof AuthNotConfiguredError) {
+      return res.status(503).json({ error: "La lectura de capturas con IA no está configurada en el servidor." });
+    }
+    console.error("extract-bet: no se pudo comprobar la sesión", error);
+    return res.status(502).json({ error: "No se ha podido comprobar tu sesión. Inténtalo de nuevo." });
+  }
+  if (!userId) {
+    return res.status(401).json({ error: "Tu sesión ha caducado. Vuelve a iniciar sesión." });
+  }
+
+  if (isRateLimited(userId)) {
     return res.status(429).json({ error: "Has analizado muchas capturas seguidas. Espera unos minutos y vuelve a intentarlo." });
   }
 

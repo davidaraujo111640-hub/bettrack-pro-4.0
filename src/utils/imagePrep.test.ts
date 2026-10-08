@@ -15,3 +15,10 @@ describe('fitSize', () => {
     expect(fitSize(4000, 2000)).toEqual({ width: 1600, height: 800 });
   });
 });
+
+describe('iconos', () => {
+  it('los iconos se reducen a un lado máximo de 192 px', () => {
+    expect(fitSize(1000, 500, 192)).toEqual({ width: 192, height: 96 });
+    expect(fitSize(100, 100, 192)).toEqual({ width: 100, height: 100 });
+  });
+});

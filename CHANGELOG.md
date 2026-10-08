@@ -6,6 +6,48 @@ El formato sigue [Versionado semántico](https://semver.org/lang/es/): **MAYOR.M
 - **MENOR** (1.0.1 → 1.1.0): funciones nuevas que no rompen nada de lo que ya había.
 - **MAYOR** (1.1.0 → 2.0.0): cambios grandes que obligan a los usuarios a hacer algo o cambian cómo se guardan los datos.
 
+## 1.1.1 · 8 oct 2026
+
+Revisión completa del proyecto: arreglos y refuerzos, sin funciones nuevas.
+
+**Datos y nube**
+- Al volver a la app tras tenerla en segundo plano, o al recuperar la conexión, se traen los cambios hechos desde otros dispositivos (antes se quedaba con datos viejos hasta reiniciarla).
+- Cargar más de 1.000 elementos desde la nube ya no puede saltarse ni repetir filas.
+- Los borrados grandes (por ejemplo, al restaurar una copia) se envían por lotes pequeños: antes podían fallar y quedarse atascados.
+- Los reintentos de subida esperan cada vez más si hay un fallo persistente.
+- Si el dispositivo se queda sin espacio, la app avisa en vez de romperse.
+- Los bankrolls conservan el orden con el que se veían al cargar de la nube.
+
+**Seguridad**
+- La lectura de capturas con IA solo funciona con la sesión iniciada: antes cualquiera con la dirección podía gastar el crédito de la IA. El límite de uso es ahora por usuario.
+- Los datos dañados (en el dispositivo o en la nube) se descartan al cargar y se guardan aparte, en vez de dejar la app caída.
+- Al cerrar sesión se suben los cambios pendientes y se borran los datos de ese dispositivo (si algo no se ha podido subir, se conserva). Así, quien use después el móvil u ordenador no ve tus apuestas.
+- El servidor local ya no es accesible desde otros equipos de la red.
+- Se puede hacer zoom en el móvil (accesibilidad); los campos de texto usan 16 px en pantallas táctiles para que iPhone no acerque la pantalla al tocarlos.
+
+**Cálculos y fechas**
+- Inicio, Bankrolls y Estadísticas usan ya la misma fórmula: las apuestas anuladas y reembolsadas no distorsionan el yield ni el % de acierto.
+- Al eliminar un bankroll se eliminan también sus apuestas, como ya avisaba el cuadro de confirmación (antes quedaban ocultas sin poder verlas).
+- Una apuesta registrada de madrugada ya no sale con la fecha del día anterior.
+- Las semanas empiezan en lunes (semanas ISO) en la agrupación por semanas.
+- Crecimiento y barra de progreso de Inicio ya no muestran "NaN" con un bankroll inicial de 0 €.
+
+**Robustez y seguridad**
+- Pantalla de recuperación si algo falla al dibujar la app (en vez de quedarse en negro), con opción de recargar y de descargar los datos.
+- Los iconos de casas que se suben se reducen antes de guardarse, y se rechazan archivos que no son imágenes o pesan demasiado.
+- Cabeceras de seguridad en la web publicada.
+- Dependencias actualizadas: sin vulnerabilidades en lo que se publica.
+- `npm run lint` vuelve a pasar sin errores.
+
+**Detalles**
+- El orden de los bankrolls es el mismo en todos los dispositivos (los nuevos llevan fecha de creación).
+- El "stake medio" de Inicio no cuenta las freebets, igual que en Estadísticas.
+- Compartir una imagen cuando la app aún no estaba lista ya no da error: se abre la app con un aviso.
+
+**Rendimiento**
+- La aplicación se reparte en varios archivos: las actualizaciones descargan mucho menos porque las librerías grandes no cambian.
+- Las tipografías de los logotipos de las casas se cargan sin bloquear la primera pantalla.
+
 ## 1.1.0 · 8 oct 2026
 
 Apuestas combinadas.

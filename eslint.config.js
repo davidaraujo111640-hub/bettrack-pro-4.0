@@ -25,4 +25,9 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // Módulos de utilidades que mezclan componentes y funciones: la recarga en caliente no importa ahí
+    files: ['src/utils/**/*.tsx'],
+    rules: { 'react-refresh/only-export-components': 'off' },
+  },
 )

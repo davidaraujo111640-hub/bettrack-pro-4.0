@@ -15,6 +15,20 @@ function gitCommit(): string {
 // Importante: no expongas claves de API aquí. Todo lo que se define en el
 // frontend acaba visible en el navegador. Las claves viven solo en el servidor.
 export default defineConfig({
+  build: {
+    rollupOptions: {
+      output: {
+        // Las librerías grandes van en archivos propios: al publicar una versión nueva solo cambia el código de la app
+        // y los móviles descargan unos pocos KB en vez de todo otra vez (el navegador conserva el resto en caché).
+        manualChunks: {
+          react: ['react', 'react-dom', 'react-router-dom'],
+          charts: ['recharts'],
+          supabase: ['@supabase/supabase-js'],
+          motion: ['framer-motion'],
+        },
+      },
+    },
+  },
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
     __APP_BUILD_DATE__: JSON.stringify(new Date().toISOString()),

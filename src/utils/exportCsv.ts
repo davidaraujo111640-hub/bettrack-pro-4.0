@@ -51,8 +51,8 @@ export function betsToCsv(bets: Bet[], bankrolls: Bankroll[]): string {
 
 /** Descarga las apuestas como archivo .csv (abre directamente en Excel). */
 export function downloadBetsCsv(bets: Bet[], bankrolls: Bankroll[], fileName: string): void {
-  // El BOM (﻿) hace que Excel lea bien las tildes y la ñ
-  const blob = new Blob(['﻿' + betsToCsv(bets, bankrolls)], { type: 'text/csv;charset=utf-8' });
+  // El BOM (U+FEFF) hace que Excel lea bien las tildes y la ñ
+  const blob = new Blob(['\uFEFF' + betsToCsv(bets, bankrolls)], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

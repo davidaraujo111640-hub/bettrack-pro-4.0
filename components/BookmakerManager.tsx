@@ -2,6 +2,8 @@
 import React from 'react';
 import { Bookmaker } from '../types';
 import { getBookmakerIcon } from '../src/utils/bookmakers';
+import { newId } from '../src/utils/id';
+import { resizeToIconDataUrl } from '../src/utils/imagePrep';
 import { BookmakerLogo } from '../src/utils/bookmakerIcons';
 import { renderBookmakerName } from '../src/utils/bookmakerStyles';
 import { Plus, Camera, Check, Power } from 'lucide-react';
@@ -14,6 +16,7 @@ interface BookmakerManagerProps {
 const BookmakerManager: React.FC<BookmakerManagerProps> = ({ bookmakers, onUpdate }) => {
   const [isAdding, setIsAdding] = React.useState(false);
   const [newBookmakerName, setNewBookmakerName] = React.useState('');
+  const [iconError, setIconError] = React.useState<string | null>(null);
 
   const toggleBookmaker = (id: string) => {
     onUpdate(bookmakers.map(b => b.id === id ? { ...b, enabled: !b.enabled } : b));
@@ -28,7 +31,7 @@ const BookmakerManager: React.FC<BookmakerManagerProps> = ({ bookmakers, onUpdat
     if (!newBookmakerName.trim()) return;
 
     const newBook: Bookmaker = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: newId(),
       name: newBookmakerName.trim(),
       icon: getBookmakerIcon(newBookmakerName.trim()),
       enabled: true
@@ -39,16 +42,19 @@ const BookmakerManager: React.FC<BookmakerManagerProps> = ({ bookmakers, onUpdat
     setIsAdding(false);
   };
 
-  const handleIconUpload = (id: string, e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleIconUpload = async (id: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const input = e.target;
+    const file = input.files?.[0];
     if (!file) return;
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64String = reader.result as string;
-      onUpdate(bookmakers.map(b => b.id === id ? { ...b, icon: base64String } : b));
-    };
-    reader.readAsDataURL(file);
+    try {
+      // Se reduce antes de guardarla: una foto grande llenaría el almacenamiento del dispositivo y de la nube
+      const icon = await resizeToIconDataUrl(file);
+      onUpdate(bookmakers.map(b => b.id === id ? { ...b, icon } : b));
+      setIconError(null);
+    } catch (error) {
+      setIconError(error instanceof Error ? error.message : 'No se ha podido usar esa imagen.');
+    }
+    input.value = '';
   };
 
   const enabledCount = bookmakers.filter(b => b.enabled).length;
@@ -60,21 +66,21 @@ const BookmakerManager: React.FC<BookmakerManagerProps> = ({ bookmakers, onUpdat
           <span className="text-[#e2001a] font-black text-[10px] uppercase tracking-[0.5em]">CONFIGURACIÓN</span>
           <h2 className="text-3xl md:text-4xl font-black tracking-tight text-white mt-2 italic">CASAS DE APUESTAS</h2>
           <p className="text-slate-500 font-bold text-[10px] md:text-xs mt-2">Activa o desactiva las plataformas que quieres ver en tus desplegables</p>
-          
+
           <div className="flex flex-wrap gap-2 mt-4">
-            <button 
+            <button
               onClick={() => toggleAll(true)}
               className="flex-1 sm:flex-none px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-[10px] font-black text-emerald-500 uppercase tracking-widest hover:bg-emerald-500 hover:text-white transition-all"
             >
               Activar
             </button>
-            <button 
+            <button
               onClick={() => toggleAll(false)}
               className="flex-1 sm:flex-none px-4 py-2 bg-red-500/10 border border-red-500/20 rounded-xl text-[10px] font-black text-red-500 uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all"
             >
               Desactivar
             </button>
-            <button 
+            <button
               onClick={() => setIsAdding(true)}
               className="flex-1 sm:flex-none px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-[10px] font-black text-slate-400 uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all"
             >
@@ -88,6 +94,10 @@ const BookmakerManager: React.FC<BookmakerManagerProps> = ({ bookmakers, onUpdat
         </div>
       </header>
 
+      {iconError && (
+        <p role="alert" className="text-[#e2001a] text-[10px] font-black uppercase bg-red-500/10 py-3 px-4 rounded-xl border border-red-500/20">{iconError}</p>
+      )}
+
       {isAdding && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-300">
           <div className="bg-zinc-950 border border-white/10 w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in-95 duration-300">
@@ -95,24 +105,24 @@ const BookmakerManager: React.FC<BookmakerManagerProps> = ({ bookmakers, onUpdat
             <form onSubmit={handleAddBookmaker} className="space-y-6">
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Nombre de la Casa</label>
-                <input 
+                <input
                   autoFocus
                   type="text"
-                  className="w-full bg-zinc-900 border border-white/10 rounded-2xl px-5 py-4 text-white font-bold outline-none focus:border-[#e2001a] transition-all" 
-                  placeholder="Ej: MyBet" 
+                  className="w-full bg-zinc-900 border border-white/10 rounded-2xl px-5 py-4 text-white font-bold outline-none focus:border-[#e2001a] transition-all"
+                  placeholder="Ej: MyBet"
                   value={newBookmakerName}
                   onChange={(e) => setNewBookmakerName(e.target.value)}
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <button 
+                <button
                   type="button"
                   onClick={() => setIsAdding(false)}
                   className="bg-zinc-900 text-white font-black py-4 rounded-2xl hover:bg-zinc-800 transition-all uppercase tracking-widest text-[10px]"
                 >
                   Cancelar
                 </button>
-                <button 
+                <button
                   type="submit"
                   className="bg-white text-black font-black py-4 rounded-2xl hover:bg-zinc-200 transition-all uppercase tracking-widest text-[10px]"
                 >
@@ -126,12 +136,12 @@ const BookmakerManager: React.FC<BookmakerManagerProps> = ({ bookmakers, onUpdat
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {bookmakers.map(bookmaker => (
-          <button 
-            key={bookmaker.id} 
+          <button
+            key={bookmaker.id}
             onClick={() => toggleBookmaker(bookmaker.id)}
             className={`glass-panel rounded-3xl p-6 border transition-all flex items-center justify-between group text-left ${
-              bookmaker.enabled 
-              ? 'border-white/20 bg-white/5 shadow-[0_0_30px_rgba(255,255,255,0.02)]' 
+              bookmaker.enabled
+              ? 'border-white/20 bg-white/5 shadow-[0_0_30px_rgba(255,255,255,0.02)]'
               : 'border-white/5 opacity-40 grayscale hover:grayscale-0 hover:opacity-100'
             }`}
           >
@@ -142,9 +152,9 @@ const BookmakerManager: React.FC<BookmakerManagerProps> = ({ bookmakers, onUpdat
                 </div>
                 <label className="absolute inset-0 bg-black/60 opacity-0 group-hover/icon:opacity-100 transition-opacity flex items-center justify-center cursor-pointer rounded-2xl">
                   <Camera className="w-4 h-4 text-white" />
-                  <input 
-                    type="file" 
-                    className="hidden" 
+                  <input
+                    type="file"
+                    className="hidden"
                     accept="image/*"
                     onChange={(e) => handleIconUpload(bookmaker.id, e)}
                   />
@@ -159,7 +169,7 @@ const BookmakerManager: React.FC<BookmakerManagerProps> = ({ bookmakers, onUpdat
                 </span>
               </div>
             </div>
-            
+
             <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
               bookmaker.enabled ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-900/40' : 'bg-zinc-800 text-slate-600'
             }`}>

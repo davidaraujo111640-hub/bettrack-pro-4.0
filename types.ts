@@ -23,6 +23,8 @@ export interface Bankroll {
   initialCapital: number;
   color: string;
   archived?: boolean;
+  /** Cuándo se creó (milisegundos): fija el orden de los bankrolls entre dispositivos */
+  createdAt?: number;
 }
 
 /** Estado de una selección de una combinada. VOID = anulada: no cuenta para la cuota total. */

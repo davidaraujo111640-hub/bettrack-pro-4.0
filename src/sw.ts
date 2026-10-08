@@ -11,7 +11,8 @@ import { SHARE_CACHE, SHARE_IMAGE_KEY } from './utils/sharedImage';
 // Tipado mínimo del contexto del service worker (el proyecto compila con la librería DOM, no con WebWorker)
 interface WorkerScope {
   __WB_MANIFEST: Array<string | { url: string; revision: string | null }>;
-  addEventListener(type: string, listener: (event: any) => void): void;
+  addEventListener(type: 'message', listener: (event: { data?: { type?: string } }) => void): void;
+  addEventListener(type: 'fetch', listener: (event: { request: Request; respondWith(r: Promise<Response>): void }) => void): void;
   skipWaiting(): Promise<void>;
   location: { origin: string };
 }

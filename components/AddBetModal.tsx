@@ -7,6 +7,8 @@ import { comboOdds, defaultParlayDescription, deriveParlayStatus, isParlay, LEG_
 import BookmakerSelect from './BookmakerSelect';
 import SportSelect from './SportSelect';
 import { prepareImage } from '../src/utils/imagePrep';
+import { todayLocal } from '../src/utils/dates';
+import { supabase } from '../src/lib/supabase';
 
 interface AddBetModalProps {
   bankrolls: Bankroll[];
@@ -21,6 +23,8 @@ interface AddBetModalProps {
   recentSports?: string[];
   /** Imagen de apuesta compartida desde otra app: se analiza al abrir el formulario */
   sharedImage?: File | null;
+  /** Se avisa en cuanto la imagen compartida empieza a analizarse, para que no se vuelva a usar */
+  onSharedImageUsed?: () => void;
 }
 
 const SPORTS: Sport[] = [
@@ -39,7 +43,7 @@ const SPORTS: Sport[] = [
   'Otros'
 ];
 
-const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, activeBankrollId, onClose, onSubmit, initialData, recentBookmakers, recentSports, sharedImage }) => {
+const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, activeBankrollId, onClose, onSubmit, initialData, recentBookmakers, recentSports, sharedImage, onSharedImageUsed }) => {
   const enabledBookmakers = bookmakers.filter(b => b.enabled);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isExtracting, setIsExtracting] = useState(false);
@@ -83,7 +87,7 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
       };
     }
     return {
-      date: new Date().toISOString().split('T')[0],
+      date: todayLocal(),
       bankrollId: activeBankrollId === 'all' ? (bankrolls.find(b => !b.archived)?.id || 'default') : activeBankrollId,
       // Por defecto, la casa más usada (si sigue visible); si no, la primera de la lista
       bookmaker: recentBookmakers?.find(n => enabledBookmakers.some(b => b.name === n)) ?? (enabledBookmakers.length > 0 ? enabledBookmakers[0].name : 'Otros'),
@@ -95,11 +99,8 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
   });
 
   // Mientras la cuota total no se haya tocado a mano, sigue al producto de las selecciones
-  useEffect(() => {
-    if (!isParlayMode || oddsEdited) return;
-    const total = autoOdds(legDrafts);
-    if (total !== null && total > 1) setInputOdds(total.toFixed(2));
-  }, [legDrafts, isParlayMode, oddsEdited]); // eslint-disable-line react-hooks/exhaustive-deps
+  const autoTotal = isParlayMode ? autoOdds(legDrafts) : null;
+  const oddsValue = isParlayMode && !oddsEdited && autoTotal !== null && autoTotal > 1 ? autoTotal.toFixed(2) : inputOdds;
 
   // Lee una imagen de apuesta (subida, pegada, arrastrada o compartida desde otra app) y rellena el formulario
   const analyzeImage = async (file: Blob) => {
@@ -108,9 +109,11 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
     try {
       const { base64, mimeType } = await prepareImage(file);
 
+      // El servidor solo atiende a quien tenga sesión iniciada
+      const { data: { session } } = await supabase.auth.getSession();
       const response = await fetch('/api/extract-bet', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}) },
         body: JSON.stringify({ imageData: base64, mimeType }),
       });
 
@@ -161,7 +164,7 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
 
   // Los eventos de pegar y de imagen compartida llaman siempre a la versión más reciente
   const analyzeImageRef = useRef(analyzeImage);
-  analyzeImageRef.current = analyzeImage;
+  useEffect(() => { analyzeImageRef.current = analyzeImage; });
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -191,6 +194,7 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
     if (!sharedImage || initialData || analyzedShared.current === sharedImage) return;
     analyzedShared.current = sharedImage;
     analyzeImageRef.current(sharedImage);
+    onSharedImageUsed?.();
   }, [sharedImage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Botón "Pegar imagen": lee el portapapeles (en iPhone no hay menú Compartir hacia la app, esta es la vía)
@@ -217,7 +221,7 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
       date: formData.date,
       bookmaker: formData.bookmaker,
       status: formData.status,
-      odds: inputOdds,
+      odds: oddsValue,
       stake: inputStake,
       cashOutAmount: inputManualProfit,
     });
@@ -250,7 +254,7 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
       status,
       description: formData.description.trim() || (legs ? defaultParlayDescription(legs) : ''),
       bookmaker: formData.bookmaker.trim(),
-      odds: legs && hasVoid && !manualStatus ? comboOdds(legs) : parseDecimal(inputOdds),
+      odds: legs && hasVoid && !manualStatus ? comboOdds(legs) : parseDecimal(oddsValue),
       stake: parseDecimal(inputStake),
       legs,
       manualProfit: formData.status === BetStatus.CASH_OUT ? parseDecimal(inputManualProfit) : undefined
@@ -472,11 +476,11 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
                     <input
                       type="text"
                       className="w-full bg-zinc-900 border border-white/5 rounded-2xl px-4 py-4 text-xl font-black text-white text-center transition-all focus:border-[#e2001a]"
-                      value={inputOdds}
+                      value={oddsValue}
                       onChange={(e) => { setInputOdds(e.target.value); if (isParlayMode) setOddsEdited(true); }}
                     />
                     {isParlayMode && oddsEdited && autoOdds(legDrafts) !== null && (
-                      <button type="button" onClick={() => { setOddsEdited(false); setInputOdds(autoOdds(legDrafts)!.toFixed(2)); }} className="w-full text-[9px] font-black text-slate-500 hover:text-white uppercase tracking-widest transition-colors">
+                      <button type="button" onClick={() => setOddsEdited(false)} className="w-full text-[9px] font-black text-slate-500 hover:text-white uppercase tracking-widest transition-colors">
                         Usar {autoOdds(legDrafts)!.toFixed(2)} (producto)
                       </button>
                     )}
