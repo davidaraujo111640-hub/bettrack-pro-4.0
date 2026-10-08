@@ -1,4 +1,5 @@
 import { Bet, BetStatus, Bankroll } from '../../types';
+import { legsToText } from './parlay';
 
 // CSV pensado para Excel en español: separador ";" y decimales con coma.
 const SEPARATOR = ';';
@@ -27,7 +28,7 @@ function textCell(value: string): string {
 
 export function betsToCsv(bets: Bet[], bankrolls: Bankroll[]): string {
   const bankrollNames = new Map(bankrolls.map(b => [b.id, b.name]));
-  const header = ['Fecha', 'Bankroll', 'Casa', 'Deporte', 'Descripción', 'Cuota', 'Importe', 'Freebet', 'Estado', 'Beneficio'];
+  const header = ['Fecha', 'Bankroll', 'Casa', 'Deporte', 'Descripción', 'Cuota', 'Importe', 'Freebet', 'Estado', 'Beneficio', 'Selecciones'];
 
   const rows = [...bets]
     .sort((a, b) => a.date.localeCompare(b.date))
@@ -42,6 +43,7 @@ export function betsToCsv(bets: Bet[], bankrolls: Bankroll[]): string {
       bet.freebet ? 'Sí' : 'No',
       STATUS_LABELS[bet.status] ?? bet.status,
       bet.status === BetStatus.PENDING ? '' : formatNumber(bet.profit),
+      textCell(legsToText(bet.legs)),
     ].join(SEPARATOR));
 
   return [header.join(SEPARATOR), ...rows].join('\r\n');

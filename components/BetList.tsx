@@ -1,11 +1,12 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { Bet, BetStatus, Bankroll, Bookmaker } from '../types';
+import { Bet, BetStatus, Bankroll, Bookmaker, LegStatus } from '../types';
+import { isParlay, LEG_STATUS_LABELS } from '../src/utils/parlay';
 import { getSportIcon } from '../src/utils/icons';
 import { calculateYield, calculateProfit, parseDecimal, realStake, getPayout } from '../src/utils/betMath';
 import { downloadBetsCsv } from '../src/utils/exportCsv';
 import { BookmakerTag } from '../src/utils/bookmakerTag';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Filter, Columns, ChevronDown, Trash2, Edit3, Check, X, AlertTriangle, Calendar, Activity, Download, FileSpreadsheet, Banknote } from 'lucide-react';
+import { Search, Filter, Columns, ChevronDown, Trash2, Edit3, Check, X, AlertTriangle, Calendar, Activity, Download, FileSpreadsheet, Banknote, Ban, Clock } from 'lucide-react';
 
 interface BetListProps {
   bets: Bet[];
@@ -18,6 +19,8 @@ interface BetListProps {
   onDelete: (id: string) => void;
   onUpdateStatus: (id: string, status: BetStatus, profit?: number) => void;
   onEdit: (bet: Bet) => void;
+  /** Cambia el estado de una selección de una combinada */
+  onUpdateLeg: (id: string, index: number, status: LegStatus) => void;
   /** Apuesta recién guardada o editada: se resalta un momento con el destello */
   justSavedId?: string | null;
 }
@@ -84,12 +87,15 @@ interface BetRowProps {
   bookmakerIcon?: string;
   /** Esta apuesta se acaba de guardar o editar */
   justSaved?: boolean;
+  onUpdateLeg: (id: string, index: number, status: LegStatus) => void;
 }
 
 const CELEBRATION_MS = 1500;
 
-const BetRow: React.FC<BetRowProps> = React.memo(({ bet, visibleColumns, onUpdateStatus, onEdit, onDeleteRequest, onCashOutRequest, bookmakerIcon, justSaved }) => {
+const BetRow: React.FC<BetRowProps> = React.memo(({ bet, visibleColumns, onUpdateStatus, onEdit, onDeleteRequest, onCashOutRequest, bookmakerIcon, justSaved, onUpdateLeg }) => {
   const payout = getPayout(bet);
+  const parlay = isParlay(bet);
+  const [expanded, setExpanded] = useState(false);
 
   // Destello al marcar como ganada (o al guardar): una franja que cruza la fila y un rebote del badge.
   // 'won' es verde; 'saved' es un destello neutro para apuestas guardadas que no están ganadas.
@@ -109,13 +115,13 @@ const BetRow: React.FC<BetRowProps> = React.memo(({ bet, visibleColumns, onUpdat
   }, [flash]);
   const badgePop = flash?.kind === 'won' ? 'bt-badge-pop' : '';
   return (
-    <motion.div 
+    <motion.div
       layout
       initial={{ opacity: 0, x: -10 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
       whileHover={{ scale: 1.005 }}
-      className="glass-panel relative rounded-xl md:rounded-2xl p-2 md:p-3 lg:p-4 flex flex-col lg:flex-row items-center gap-2 lg:gap-3 group transition-all w-full overflow-hidden"
+      className="glass-panel relative rounded-xl md:rounded-2xl p-2 md:p-3 lg:p-4 flex flex-col lg:flex-row lg:flex-wrap items-center gap-2 lg:gap-3 group transition-all w-full overflow-hidden"
       style={getRowStyle(bet.status)}
     >
       {flash && <span key={flash.n} aria-hidden="true" className={`bt-sweep bt-sweep--play ${flash.kind === 'saved' ? 'bt-sweep--saved' : ''}`} />}
@@ -126,10 +132,22 @@ const BetRow: React.FC<BetRowProps> = React.memo(({ bet, visibleColumns, onUpdat
               {getSportIcon(bet.sport)}
           </div>
         )}
-        
+
         <div className="flex-1 min-w-0 overflow-hidden">
           <div className="flex items-center gap-1.5 md:gap-2 mb-0.5 flex-wrap overflow-hidden">
             {visibleColumns.bookmaker && <BookmakerTag name={bet.bookmaker} icon={bookmakerIcon} />}
+            {parlay && (
+              <button
+                type="button"
+                onClick={() => setExpanded(e => !e)}
+                aria-expanded={expanded}
+                title="Ver las selecciones de la combinada"
+                className="px-1.5 py-0.5 rounded-md bg-sky-500/15 border border-sky-500/30 text-sky-300 text-[9px] md:text-[10px] font-black tracking-wider shrink-0 flex items-center gap-1 hover:bg-sky-500/25 transition-colors"
+              >
+                COMBI ×{bet.legs!.length}
+                <ChevronDown size={10} className={`transition-transform ${expanded ? 'rotate-180' : ''}`} />
+              </button>
+            )}
             {bet.freebet && <span title="Freebet (apuesta gratis)" className="px-1.5 py-0.5 rounded-md bg-violet-500 text-white text-[9px] md:text-[10px] font-black tracking-wider shrink-0">FB</span>}
             {visibleColumns.date && (
               <span className="text-[8px] font-bold text-slate-500 uppercase tracking-tighter flex items-center gap-0.5 shrink-0 whitespace-nowrap">
@@ -139,7 +157,7 @@ const BetRow: React.FC<BetRowProps> = React.memo(({ bet, visibleColumns, onUpdat
           </div>
           <h4 className="font-black text-[10px] md:text-sm text-white leading-tight truncate uppercase italic tracking-tight w-full">{bet.description || bet.sport}</h4>
         </div>
-        
+
         {/* Mobile Stats Summary (Solo visible en móvil) */}
         <div className="lg:hidden flex items-center gap-2 shrink-0 ml-1">
            <div className="flex flex-col items-end">
@@ -202,7 +220,7 @@ const BetRow: React.FC<BetRowProps> = React.memo(({ bet, visibleColumns, onUpdat
                   {formatStatusText(bet.status)}
                 </div>
               )}
-              
+
               <div className="flex items-center gap-1">
                   <button onClick={() => onEdit(bet)} className="w-8 h-8 rounded-lg text-zinc-500 hover:text-white hover:bg-white/5 transition-all flex items-center justify-center shrink-0"><Edit3 size={14} /></button>
                   <button onClick={() => onDeleteRequest(bet.id)} className="w-8 h-8 rounded-lg text-zinc-500 hover:text-[#e2001a] hover:bg-[#e2001a]/10 transition-all flex items-center justify-center shrink-0"><Trash2 size={14} /></button>
@@ -231,11 +249,42 @@ const BetRow: React.FC<BetRowProps> = React.memo(({ bet, visibleColumns, onUpdat
           </div>
         </div>
       )}
+      {parlay && expanded && (
+        <div className="w-full lg:basis-full border-t border-white/5 pt-2 space-y-1.5">
+          {bet.legs!.map((leg, i) => (
+            <div key={i} className="flex items-center gap-2 text-[11px]">
+              <span className="w-5 text-center font-black text-slate-600 shrink-0">{i + 1}</span>
+              <span className={`flex-1 min-w-0 truncate font-bold ${leg.status === 'VOID' ? 'text-zinc-600 line-through' : 'text-slate-200'}`}>{leg.description || `Selección ${i + 1}`}</span>
+              <span className="font-black text-white shrink-0 tabular-nums">{leg.odds.toFixed(2)}</span>
+              <div className="flex gap-1 shrink-0" role="group" aria-label={`Estado de la selección ${i + 1}`}>
+                {([
+                  ['WON', Check, 'bg-emerald-500 text-white', 'text-emerald-500 bg-emerald-500/10'],
+                  ['LOST', X, 'bg-[#e2001a] text-white', 'text-[#e2001a] bg-[#e2001a]/10'],
+                  ['VOID', Ban, 'bg-blue-500 text-white', 'text-blue-400 bg-blue-500/10'],
+                  ['PENDING', Clock, 'bg-zinc-500 text-white', 'text-zinc-500 bg-white/5'],
+                ] as [LegStatus, typeof Check, string, string][]).map(([st, Icon, on, off]) => (
+                  <button
+                    key={st}
+                    type="button"
+                    title={LEG_STATUS_LABELS[st]}
+                    aria-label={LEG_STATUS_LABELS[st]}
+                    aria-pressed={leg.status === st}
+                    onClick={() => onUpdateLeg(bet.id, i, st)}
+                    className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all ${leg.status === st ? on : off + ' hover:brightness-125'}`}
+                  >
+                    <Icon size={13} />
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </motion.div>
   );
 });
 
-const BetList: React.FC<BetListProps> = ({ bets, allBets, bookmakers, bankrolls, activeBankrollName, onDelete, onUpdateStatus, onEdit, justSavedId }) => {
+const BetList: React.FC<BetListProps> = ({ bets, allBets, bookmakers, bankrolls, activeBankrollName, onDelete, onUpdateStatus, onEdit, onUpdateLeg, justSavedId }) => {
   const bookmakerIcons = useMemo(
     () => new Map(bookmakers.map(b => [b.name.toLowerCase(), b.icon])),
     [bookmakers]
@@ -269,7 +318,7 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bookmakers, bankrolls,
     return bets.filter(b => {
       const matchesStatus = statusFilter === 'ALL' || b.status === statusFilter;
       const matchesBookmaker = bookmakerFilter === 'ALL' || b.bookmaker === bookmakerFilter;
-      const matchesSearch = b.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      const matchesSearch = b.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
                             b.bookmaker.toLowerCase().includes(searchTerm.toLowerCase());
       return matchesStatus && matchesBookmaker && matchesSearch;
     });
@@ -353,7 +402,7 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bookmakers, bankrolls,
   }, [groupedBets, collapsedGroups]);
 
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       className="space-y-6 px-4 md:px-0 pb-20"
@@ -375,7 +424,7 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bookmakers, bankrolls,
             <div className="md:hidden self-center">
               <div className="relative">
                 <Calendar className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-600 pointer-events-none" size={10} />
-                <select 
+                <select
                   className="bg-zinc-950/50 border border-white/5 rounded-xl pl-6 pr-2 py-1.5 text-[9px] font-black text-slate-500 outline-none appearance-none uppercase tracking-tighter"
                   value={grouping}
                   onChange={(e) => setGrouping(e.target.value as 'NONE' | 'DAY' | 'WEEK' | 'MONTH' | 'YEAR')}
@@ -389,12 +438,12 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bookmakers, bankrolls,
               </div>
             </div>
           </div>
-          
+
           <div className="flex flex-col sm:flex-row gap-2 md:gap-3 w-full lg:w-auto">
               <div className="relative group flex-1 hidden md:block">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-600 group-focus-within:text-[#e2001a] transition-colors" size={14} />
-                <input 
-                    type="text" 
+                <input
+                    type="text"
                     placeholder="Buscar..."
                     className="bg-zinc-950 border border-white/5 rounded-2xl pl-11 pr-4 py-3.5 text-xs font-bold text-white outline-none focus:border-[#e2001a]/50 w-full lg:w-64 transition-all shadow-inner"
                     value={searchTerm}
@@ -405,7 +454,7 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bookmakers, bankrolls,
               <div className="flex gap-2 w-full sm:w-auto">
                 <div className="relative flex-1 sm:flex-none hidden md:block">
                   <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600 pointer-events-none" size={12} />
-                  <select 
+                  <select
                     className="w-full bg-zinc-950 border border-white/5 rounded-2xl pl-9 pr-4 py-3.5 text-xs font-bold text-slate-400 outline-none focus:border-[#e2001a]/50 shadow-inner appearance-none"
                     value={bookmakerFilter}
                     onChange={(e) => setBookmakerFilter(e.target.value)}
@@ -419,7 +468,7 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bookmakers, bankrolls,
 
                 <div className="relative flex-1 sm:flex-none hidden md:block">
                   <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600 pointer-events-none" size={12} />
-                  <select 
+                  <select
                     className="w-full bg-zinc-950 border border-white/5 rounded-2xl pl-9 pr-4 py-3.5 text-xs font-bold text-slate-400 outline-none focus:border-[#e2001a]/50 shadow-inner appearance-none"
                     value={grouping}
                     onChange={(e) => setGrouping(e.target.value as 'NONE' | 'DAY' | 'WEEK' | 'MONTH' | 'YEAR')}
@@ -433,7 +482,7 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bookmakers, bankrolls,
                 </div>
 
                 {grouping !== 'NONE' && (
-                  <button 
+                  <button
                     onClick={toggleAllGroups}
                     className="flex-1 sm:flex-none bg-zinc-950 border border-white/5 rounded-2xl px-4 py-3.5 text-xs font-bold text-slate-400 hover:text-white hover:border-white/20 transition-all shadow-inner flex items-center justify-center hidden md:flex"
                     title={Object.values(collapsedGroups).some(v => !v) ? "Colapsar todo" : "Expandir todo"}
@@ -443,7 +492,7 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bookmakers, bankrolls,
                 )}
 
                 <div className="relative flex-1 sm:flex-none hidden md:block">
-                  <button 
+                  <button
                     onClick={() => setShowColumnSettings(!showColumnSettings)}
                     className="w-full bg-zinc-950 border border-white/5 rounded-2xl px-4 py-3.5 text-xs font-bold text-slate-400 hover:text-white hover:border-white/20 transition-all shadow-inner flex items-center justify-center"
                     title="Configurar columnas"
@@ -453,7 +502,7 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bookmakers, bankrolls,
 
                   <AnimatePresence>
                     {showColumnSettings && (
-                      <motion.div 
+                      <motion.div
                         initial={{ opacity: 0, scale: 0.95, y: 10 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -463,8 +512,8 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bookmakers, bankrolls,
                         <div className="space-y-2">
                           {Object.entries(visibleColumns).map(([key, value]) => (
                             <label key={key} className="flex items-center gap-3 cursor-pointer group">
-                              <input 
-                                type="checkbox" 
+                              <input
+                                type="checkbox"
                                 checked={value}
                                 onChange={() => setVisibleColumns(prev => ({ ...prev, [key]: !value }))}
                                 className="hidden"
@@ -473,11 +522,11 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bookmakers, bankrolls,
                                 {value && <Check size={8} className="text-white" />}
                               </div>
                               <span className="text-[10px] font-bold text-slate-400 group-hover:text-white transition-colors capitalize">
-                                {key === 'sportIcon' ? 'Icono Deporte' : 
-                                 key === 'bookmaker' ? 'Casa' : 
-                                 key === 'date' ? 'Fecha' : 
-                                 key === 'odds' ? 'Cuota' : 
-                                 key === 'stake' ? 'Apuesta' : 
+                                {key === 'sportIcon' ? 'Icono Deporte' :
+                                 key === 'bookmaker' ? 'Casa' :
+                                 key === 'date' ? 'Fecha' :
+                                 key === 'odds' ? 'Cuota' :
+                                 key === 'stake' ? 'Apuesta' :
                                  key === 'profit' ? 'Beneficio' : 'Acciones'}
                               </span>
                             </label>
@@ -551,7 +600,7 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bookmakers, bankrolls,
         </div>
 
         <div className="grid grid-cols-3 md:grid-cols-3 gap-2 md:gap-3">
-          <motion.div 
+          <motion.div
             whileHover={{ y: -5 }}
             className="bg-zinc-900/30 border border-white/5 p-2 md:p-5 rounded-xl md:rounded-[2rem] backdrop-blur-sm flex flex-col items-center justify-center text-center"
           >
@@ -560,7 +609,7 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bookmakers, bankrolls,
               {quickStats.profit >= 0 ? '+' : ''}{quickStats.profit.toFixed(1)}€
             </p>
           </motion.div>
-          <motion.div 
+          <motion.div
             whileHover={{ y: -5 }}
             className="bg-zinc-900/30 border border-white/5 p-2 md:p-5 rounded-xl md:rounded-[2rem] backdrop-blur-sm flex flex-col items-center justify-center text-center"
           >
@@ -569,7 +618,7 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bookmakers, bankrolls,
               {quickStats.yield.toFixed(1)}%
             </p>
           </motion.div>
-          <motion.div 
+          <motion.div
             whileHover={{ y: -5 }}
             className="bg-zinc-900/30 border border-white/5 p-2 md:p-5 rounded-xl md:rounded-[2rem] backdrop-blur-sm flex flex-col items-center justify-center text-center"
           >
@@ -582,19 +631,19 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bookmakers, bankrolls,
       <div className="space-y-8">
         <AnimatePresence mode="popLayout">
           {Object.keys(groupedBets).length > 0 ? Object.entries(groupedBets).map(([groupName, groupData]) => (
-            <motion.div 
-              key={groupName} 
+            <motion.div
+              key={groupName}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               className="space-y-4"
             >
               {grouping !== 'NONE' && (
-                <div 
+                <div
                   className="flex items-center justify-between gap-4 px-4 py-3 bg-zinc-900/80 backdrop-blur-md border border-white/5 rounded-2xl cursor-pointer hover:bg-zinc-900/90 transition-all group/header sticky top-4 z-10 shadow-lg"
                   onClick={() => toggleGroup(groupName)}
                 >
                   <div className="flex items-center gap-3">
-                    <motion.div 
+                    <motion.div
                       animate={{ rotate: collapsedGroups[groupName] ? -90 : 0 }}
                       className="w-6 h-6 rounded-lg flex items-center justify-center"
                     >
@@ -602,7 +651,7 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bookmakers, bankrolls,
                     </motion.div>
                     <h3 className="text-[10px] font-black text-white uppercase tracking-[0.2em]">{groupName}</h3>
                   </div>
-                  
+
                   <div className="flex items-center gap-3 md:gap-6">
                     <div className="flex items-center gap-3 md:gap-6 hidden sm:flex">
                       <div className="flex flex-col items-end">
@@ -613,7 +662,7 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bookmakers, bankrolls,
                       </div>
                       <div className="w-px h-6 md:h-8 bg-white/10"></div>
                     </div>
-                    
+
                     <div className="flex flex-col items-end">
                       <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest">Profit</span>
                       <span className={`text-lg md:text-lg font-black tracking-tighter ${groupData.profit >= 0 ? 'text-emerald-400' : 'text-[#e2001a]'}`}>
@@ -627,23 +676,23 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bookmakers, bankrolls,
                   </div>
                 </div>
               )}
-              
+
               <AnimatePresence initial={false}>
                 {!collapsedGroups[groupName] && (
-                  <motion.div 
+                  <motion.div
                     initial={{ height: 0, opacity: 0 }}
-                    animate={{ 
-                      height: 'auto', 
+                    animate={{
+                      height: 'auto',
                       opacity: 1,
-                      transition: { 
+                      transition: {
                         height: { duration: 0.25, ease: "easeOut" },
                         opacity: { duration: 0.2 }
                       }
                     }}
-                    exit={{ 
-                      height: 0, 
+                    exit={{
+                      height: 0,
                       opacity: 0,
-                      transition: { 
+                      transition: {
                         height: { duration: 0.2, ease: "easeIn" },
                         opacity: { duration: 0.15 }
                       }
@@ -653,16 +702,17 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bookmakers, bankrolls,
                     <div className="grid grid-cols-1 gap-3 md:gap-4 pt-2">
                       <AnimatePresence mode="popLayout">
                         {groupData.bets.map(bet => (
-                          <BetRow 
-                            key={bet.id} 
-                            bet={bet} 
-                            visibleColumns={visibleColumns} 
-                            onUpdateStatus={onUpdateStatus} 
-                            onEdit={onEdit} 
+                          <BetRow
+                            key={bet.id}
+                            bet={bet}
+                            visibleColumns={visibleColumns}
+                            onUpdateStatus={onUpdateStatus}
+                            onEdit={onEdit}
                             onDeleteRequest={setBetToDelete}
                             onCashOutRequest={(b: Bet) => { setBetToCashOut(b); setCashOutAmount(''); }}
                             bookmakerIcon={bookmakerIcons.get(bet.bookmaker.toLowerCase())}
                             justSaved={bet.id === justSavedId}
+                            onUpdateLeg={onUpdateLeg}
                           />
                         ))}
                       </AnimatePresence>
@@ -672,7 +722,7 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bookmakers, bankrolls,
               </AnimatePresence>
             </motion.div>
           )) : (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 0.4 }}
               className="glass-panel rounded-[3rem] p-24 text-center border-dashed border-2 border-white/5 flex flex-col items-center gap-6"
@@ -691,7 +741,7 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bookmakers, bankrolls,
       <AnimatePresence>
         {betToDelete && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
@@ -700,20 +750,20 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bookmakers, bankrolls,
               <div className="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center mb-6 mx-auto">
                 <AlertTriangle size={32} className="text-[#e2001a]" />
               </div>
-              
+
               <h3 className="text-2xl font-black text-white text-center italic tracking-tight mb-2">¿Eliminar Apuesta?</h3>
               <p className="text-slate-500 text-sm font-bold text-center leading-relaxed mb-8">
                 Esta acción es permanente y no se podrá recuperar. Los datos de tu bankroll se recalcularán automáticamente.
               </p>
-              
+
               <div className="grid grid-cols-2 gap-4">
-                <button 
+                <button
                   onClick={() => setBetToDelete(null)}
                   className="bg-zinc-900 text-white font-black py-4 rounded-2xl hover:bg-zinc-800 transition-all uppercase tracking-widest text-[10px]"
                 >
                   Cancelar
                 </button>
-                <button 
+                <button
                   onClick={() => {
                     onDelete(betToDelete);
                     setBetToDelete(null);

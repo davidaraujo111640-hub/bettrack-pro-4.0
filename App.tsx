@@ -14,9 +14,10 @@ import ProfileModal from './components/ProfileModal';
 import AnimatedLogo from './components/AnimatedLogo';
 import UpdatePrompt from './components/UpdatePrompt';
 import UserBadge from './components/UserBadge';
-import { Bet, BetStatus, BankrollStats, Bankroll, User, Bookmaker } from './types';
+import { Bet, BetStatus, BankrollStats, Bankroll, User, Bookmaker, LegStatus } from './types';
 import { defaultBookmakers, normalizeBookmakers } from './src/utils/defaultBookmakers';
 import { calculateProfit, calculateRoi, calculateYield, realStake } from './src/utils/betMath';
+import { isParlay, resolveParlay, setLegStatus } from './src/utils/parlay';
 import { BackupData, downloadBackup, parseBackup } from './src/utils/backup';
 import { supabase, toAppUser } from './src/lib/supabase';
 import { useCloudSync } from './src/lib/useCloudSync';
@@ -41,18 +42,18 @@ function readLocalBackup(): BackupData | null {
 
 /** Datos de una cuenta nueva */
 const emptyData = (): CloudData => ({ bets: [], bankrolls: [DEFAULT_BANKROLL], bookmakers: defaultBookmakers() });
-import { 
-  Home, 
-  ListCheck, 
-  PieChart, 
-  Wallet, 
-  Zap, 
-  Landmark, 
-  Globe, 
-  LogOut, 
-  ChevronDown, 
-  CheckCircle2, 
-  PlusCircle, 
+import {
+  Home,
+  ListCheck,
+  PieChart,
+  Wallet,
+  Zap,
+  Landmark,
+  Globe,
+  LogOut,
+  ChevronDown,
+  CheckCircle2,
+  PlusCircle,
   Plus,
   RefreshCw,
   CloudOff,
@@ -96,7 +97,7 @@ const App: React.FC = () => {
       return [];
     }
   });
-  
+
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isBankrollDropdownOpen, setIsBankrollDropdownOpen] = useState(false);
   const [editingBet, setEditingBet] = useState<Bet | null>(null);
@@ -208,8 +209,8 @@ const App: React.FC = () => {
     const totalProfit = closedBets.reduce((acc, b) => acc + b.profit, 0);
     const totalStake = closedBets.reduce((acc, b) => acc + realStake(b), 0);
     const wonBets = closedBets.filter(b => b.status === BetStatus.WON || (b.status === BetStatus.CASH_OUT && b.profit > 0)).length;
-    
-    const initialCap = activeBankrollId === 'all' 
+
+    const initialCap = activeBankrollId === 'all'
       ? bankrolls.filter(b => !b.archived).reduce((acc, b) => acc + b.initialCapital, 0)
       : (bankrolls.find(b => b.id === activeBankrollId)?.initialCapital || 0);
 
@@ -270,6 +271,10 @@ const App: React.FC = () => {
   const handleUpdateStatus = useCallback((id: string, newStatus: BetStatus, manualProfit?: number) => {
     setBets(prevBets => prevBets.map(bet => {
       if (bet.id === id) {
+        // En una combinada, ✓ y ✗ resuelven sus selecciones y el estado sale de ellas
+        if (isParlay(bet) && manualProfit === undefined && (newStatus === BetStatus.WON || newStatus === BetStatus.LOST)) {
+          return resolveParlay(bet, newStatus);
+        }
         const profit = calculateProfit(newStatus, bet.odds, bet.stake, manualProfit, bet.freebet);
         return { ...bet, status: newStatus, profit };
       }
@@ -287,6 +292,11 @@ const App: React.FC = () => {
     showToast(`Estado cambiado a ${statusLabel}`, 'info');
     updateLastSaved();
   }, [showToast, updateLastSaved]);
+
+  const handleUpdateLeg = useCallback((id: string, index: number, status: LegStatus) => {
+    setBets(prevBets => prevBets.map(bet => (bet.id === id ? setLegStatus(bet, index, status) : bet)));
+    updateLastSaved();
+  }, [updateLastSaved]);
 
   const handleEdit = useCallback((bet: Bet) => {
     setEditingBet(bet);
@@ -460,7 +470,7 @@ const App: React.FC = () => {
           </div>
 
           <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
-             <button 
+             <button
                 onClick={() => setIsProfileModalOpen(true)}
                 className="w-full flex items-center gap-3 hover:bg-white/5 p-2 rounded-xl transition-all group"
              >
@@ -488,7 +498,7 @@ const App: React.FC = () => {
           <div className="mt-auto space-y-4">
             <div className="relative bankroll-dropdown-container">
               <div className="p-1.5 bg-zinc-900/50 rounded-[2rem] border border-white/10 shadow-2xl backdrop-blur-xl">
-                <button 
+                <button
                   onClick={() => setIsBankrollDropdownOpen(!isBankrollDropdownOpen)}
                   className="w-full flex items-center justify-between p-4 rounded-[1.5rem] bg-zinc-900 border border-white/5 hover:border-[#e2001a]/30 transition-all group active:scale-[0.98]"
                 >
@@ -512,7 +522,7 @@ const App: React.FC = () => {
                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] text-center">Seleccionar Bankroll</p>
                     </div>
                     <div className="max-h-64 overflow-y-auto no-scrollbar p-2">
-                      <button 
+                      <button
                         onClick={() => { setActiveBankrollId('all'); setIsBankrollDropdownOpen(false); }}
                         className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all ${activeBankrollId === 'all' ? 'bg-[#e2001a] text-white' : 'hover:bg-white/5 text-slate-400'}`}
                       >
@@ -521,9 +531,9 @@ const App: React.FC = () => {
                         </div>
                         <span className="text-xs font-black uppercase italic tracking-tight">Global</span>
                       </button>
-                      
+
                       {bankrolls.filter(b => !b.archived).map(b => (
-                        <button 
+                        <button
                           key={b.id}
                           onClick={() => { setActiveBankrollId(b.id); setIsBankrollDropdownOpen(false); }}
                           className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all mt-1 ${activeBankrollId === b.id ? 'bg-[#e2001a] text-white' : 'hover:bg-white/5 text-slate-400'}`}
@@ -548,7 +558,7 @@ const App: React.FC = () => {
                 </div>
               </div>
             </div>
-            <button 
+            <button
               onClick={() => { setEditingBet(null); setIsAddModalOpen(true); }}
               className="w-full font-extrabold py-5 rounded-[1.5rem] flex items-center justify-center gap-3 transition-all bg-[#e2001a] text-white shadow-2xl shadow-red-900/40 active:scale-95"
             >
@@ -562,9 +572,9 @@ const App: React.FC = () => {
         <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 glass-panel border-t border-white/10 px-2 py-3 flex items-center justify-between rounded-t-[2rem] safe-area-pb">
             <MobileNavLink to="/" icon={<Home className="w-5 h-5" />} label="Inicio" />
             <MobileNavLink to="/bets" icon={<ListCheck className="w-5 h-5" />} label="Apuestas" />
-            
+
             <div className="relative -mt-12">
-                <button 
+                <button
                     onClick={() => { setEditingBet(null); setIsAddModalOpen(true); }}
                     className="w-14 h-14 rounded-full flex items-center justify-center border-4 border-[#050505] transition-all bg-[#e2001a] text-white shadow-xl shadow-red-900/40 active:scale-90"
                 >
@@ -580,7 +590,7 @@ const App: React.FC = () => {
           <div className="max-w-6xl mx-auto">
             <Routes>
               <Route path="/" element={<Dashboard stats={stats} bets={filteredBets} userName={user?.name} userPlan={user?.plan} onProfileClick={() => setIsProfileModalOpen(true)} syncState={cloud.syncState} onSyncClick={() => showToast(cloud.syncState === 'synced' ? 'Guardado en la nube' : cloud.syncState === 'pending' ? 'Sincronizando…' : 'Sin conexión: los cambios se subirán al volver internet', cloud.syncState === 'offline' ? 'info' : 'success')} />} />
-              <Route path="/bets" element={<BetList bets={filteredBets} allBets={bets} bookmakers={bookmakers} bankrolls={bankrolls} activeBankrollName={activeBankrollName} onDelete={handleDeleteBet} onUpdateStatus={handleUpdateStatus} onEdit={handleEdit} justSavedId={justSavedId} />} />
+              <Route path="/bets" element={<BetList bets={filteredBets} allBets={bets} bookmakers={bookmakers} bankrolls={bankrolls} activeBankrollName={activeBankrollName} onDelete={handleDeleteBet} onUpdateStatus={handleUpdateStatus} onEdit={handleEdit} onUpdateLeg={handleUpdateLeg} justSavedId={justSavedId} />} />
               <Route path="/statistics" element={<Statistics bets={filteredBets} stats={stats} bankrolls={bankrolls} activeBankrollId={activeBankrollId} onSelectBankroll={handleSetActiveBankroll} />} />
               <Route path="/bankrolls" element={<BankrollManager bankrolls={bankrolls} bets={bets} onUpdate={setBankrolls} activeBankrollId={activeBankrollId} onSelect={handleSetActiveBankroll} onExportBackup={handleExportBackup} onImportBackup={handleImportBackupFile} localBackup={localBackup ? { bets: localBackup.bets.length, bankrolls: localBackup.bankrolls.length } : null} onRestoreLocalBackup={handleRestoreLocalBackup} onDownloadLocalBackup={handleDownloadLocalBackup} />} />
               <Route path="/bookmakers" element={<BookmakerManager bookmakers={bookmakers} onUpdate={setBookmakers} />} />
@@ -589,12 +599,12 @@ const App: React.FC = () => {
         </main>
 
         {isAddModalOpen && (
-          <AddBetModal 
+          <AddBetModal
             key={editingBet?.id || 'new'}
             bankrolls={bankrolls}
             bookmakers={bookmakers}
             activeBankrollId={activeBankrollId}
-            onClose={() => { setIsAddModalOpen(false); setEditingBet(null); }} 
+            onClose={() => { setIsAddModalOpen(false); setEditingBet(null); }}
             onSubmit={handleAddBet}
             initialData={editingBet || undefined}
             recentBookmakers={recentBookmakers}
@@ -606,10 +616,10 @@ const App: React.FC = () => {
         <UpdatePrompt />
 
         {toast && (
-          <Toast 
-            message={toast.message} 
-            type={toast.type} 
-            onClose={() => setToast(null)} 
+          <Toast
+            message={toast.message}
+            type={toast.type}
+            onClose={() => setToast(null)}
           />
         )}
 
@@ -634,7 +644,7 @@ const App: React.FC = () => {
         />
 
         {isProfileModalOpen && (
-          <ProfileModal 
+          <ProfileModal
             isOpen={isProfileModalOpen}
             user={user}
             onClose={() => setIsProfileModalOpen(false)}

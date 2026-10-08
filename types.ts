@@ -25,6 +25,17 @@ export interface Bankroll {
   archived?: boolean;
 }
 
+/** Estado de una selección de una combinada. VOID = anulada: no cuenta para la cuota total. */
+export type LegStatus = 'PENDING' | 'WON' | 'LOST' | 'VOID';
+
+/** Una selección de una apuesta combinada */
+export interface BetLeg {
+  description: string;
+  /** Cuota de esta selección */
+  odds: number;
+  status: LegStatus;
+}
+
 export interface Bet {
   id: string;
   bankrollId: string;
@@ -38,6 +49,8 @@ export interface Bet {
   description: string;
   /** Freebet (apuesta gratis): si se pierde no resta el importe; si se gana, solo cuenta la ganancia neta */
   freebet?: boolean;
+  /** Selecciones, si es una combinada (2 o más). `odds` es entonces la cuota total. */
+  legs?: BetLeg[];
 }
 
 export interface Bookmaker {

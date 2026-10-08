@@ -1,4 +1,4 @@
-import { Bet, BetStatus, Bankroll, Bookmaker } from '../../types';
+import { Bet, BetStatus, BetLeg, LegStatus, Bankroll, Bookmaker } from '../../types';
 import { calculateRoi, calculateYield, round2, realStake } from './betMath';
 
 export const BACKUP_VERSION = 2;
@@ -74,6 +74,19 @@ export function downloadBackup(data: Required<BackupData>): void {
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
 const VALID_STATUSES = new Set<string>(Object.values(BetStatus));
+const VALID_LEG_STATUSES = new Set<string>(['PENDING', 'WON', 'LOST', 'VOID']);
+
+/** Lee las selecciones de una combinada. Devuelve null si alguna está dañada. */
+function parseLegs(raw: unknown): BetLeg[] | null {
+  if (!Array.isArray(raw)) return null;
+  const legs: BetLeg[] = [];
+  for (const item of raw) {
+    if (!isObject(item) || typeof item.odds !== 'number' || !(item.odds > 0)) return null;
+    if (typeof item.status !== 'string' || !VALID_LEG_STATUSES.has(item.status)) return null;
+    legs.push({ description: typeof item.description === 'string' ? item.description : '', odds: item.odds, status: item.status as LegStatus });
+  }
+  return legs;
+}
 
 function parseBet(raw: unknown): Bet | null {
   if (!isObject(raw)) return null;
@@ -81,6 +94,12 @@ function parseBet(raw: unknown): Bet | null {
   if (typeof id !== 'string' || typeof bankrollId !== 'string' || typeof date !== 'string') return null;
   if (typeof odds !== 'number' || typeof stake !== 'number' || typeof profit !== 'number') return null;
   if (typeof status !== 'string' || !VALID_STATUSES.has(status)) return null;
+  let legs: BetLeg[] | undefined;
+  if (raw.legs !== undefined) {
+    const parsed = parseLegs(raw.legs);
+    if (!parsed) return null;
+    if (parsed.length > 0) legs = parsed;
+  }
   return {
     id,
     bankrollId,
@@ -93,6 +112,7 @@ function parseBet(raw: unknown): Bet | null {
     sport: (typeof raw.sport === 'string' ? raw.sport : 'Otros') as Bet['sport'],
     description: typeof raw.description === 'string' ? raw.description : '',
     ...(raw.freebet === true ? { freebet: true } : {}),
+    ...(legs ? { legs } : {}),
   };
 }
 

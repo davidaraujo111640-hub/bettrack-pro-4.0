@@ -1,8 +1,9 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Bet, BetStatus, Sport, Bankroll, Bookmaker } from '../types';
-import { Camera, Loader2, X, Banknote, AlertTriangle, ClipboardPaste } from 'lucide-react';
-import { parseDecimal, validateBetForm } from '../src/utils/betMath';
+import { Bet, BetStatus, BetLeg, LegStatus, Sport, Bankroll, Bookmaker } from '../types';
+import { Camera, Loader2, X, Banknote, AlertTriangle, ClipboardPaste, Plus, Trash2 } from 'lucide-react';
+import { parseDecimal, validateBetForm, MIN_ODDS } from '../src/utils/betMath';
+import { comboOdds, defaultParlayDescription, deriveParlayStatus, isParlay, LEG_STATUS_LABELS, LEG_STATUSES, MIN_LEGS } from '../src/utils/parlay';
 import BookmakerSelect from './BookmakerSelect';
 import SportSelect from './SportSelect';
 import { prepareImage } from '../src/utils/imagePrep';
@@ -23,18 +24,18 @@ interface AddBetModalProps {
 }
 
 const SPORTS: Sport[] = [
-  'Fútbol', 
-  'Baloncesto', 
-  'Tenis', 
-  'eSports', 
-  'Béisbol', 
-  'NFL', 
-  'MMA', 
-  'Ciclismo', 
-  'F1', 
-  'MotoGP', 
-  'Boxeo', 
-  'Caballos', 
+  'Fútbol',
+  'Baloncesto',
+  'Tenis',
+  'eSports',
+  'Béisbol',
+  'NFL',
+  'MMA',
+  'Ciclismo',
+  'F1',
+  'MotoGP',
+  'Boxeo',
+  'Caballos',
   'Otros'
 ];
 
@@ -48,6 +49,26 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
   const [inputOdds, setInputOdds] = useState(initialData ? initialData.odds.toString() : '1.80');
   const [inputStake, setInputStake] = useState(initialData ? initialData.stake.toString() : '10');
   const [inputManualProfit, setInputManualProfit] = useState(initialData ? (initialData.status === BetStatus.CASH_OUT ? (initialData.profit + (initialData.freebet ? 0 : initialData.stake)) : initialData.profit || 0).toString() : '0');
+
+  // Combinada: varias selecciones en una sola apuesta. La cuota total se calcula sola, salvo que se edite a mano
+  interface LegDraft { description: string; odds: string; status: LegStatus }
+  const emptyLeg = (): LegDraft => ({ description: '', odds: '', status: 'PENDING' });
+  const [isParlayMode, setIsParlayMode] = useState(() => !!initialData && isParlay(initialData));
+  const [legDrafts, setLegDrafts] = useState<LegDraft[]>(() =>
+    initialData?.legs?.length
+      ? initialData.legs.map(l => ({ description: l.description, odds: String(l.odds), status: l.status }))
+      : [emptyLeg(), emptyLeg()]
+  );
+  const [oddsEdited, setOddsEdited] = useState(!!initialData);
+
+  const draftsToLegs = (drafts: LegDraft[]): BetLeg[] =>
+    drafts.map(l => ({ description: l.description.trim(), odds: parseDecimal(l.odds), status: l.status }));
+  const autoOdds = (drafts: LegDraft[]): number | null => {
+    const legs = draftsToLegs(drafts);
+    return legs.length > 0 && legs.every(l => Number.isFinite(l.odds) && l.odds > 0) ? comboOdds(legs) : null;
+  };
+  const updateLeg = (index: number, patch: Partial<LegDraft>) =>
+    setLegDrafts(prev => prev.map((l, i) => (i === index ? { ...l, ...patch } : l)));
 
   const [formData, setFormData] = useState(() => {
     if (initialData) {
@@ -72,6 +93,13 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
       freebet: false,
     };
   });
+
+  // Mientras la cuota total no se haya tocado a mano, sigue al producto de las selecciones
+  useEffect(() => {
+    if (!isParlayMode || oddsEdited) return;
+    const total = autoOdds(legDrafts);
+    if (total !== null && total > 1) setInputOdds(total.toFixed(2));
+  }, [legDrafts, isParlayMode, oddsEdited]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Lee una imagen de apuesta (subida, pegada, arrastrada o compartida desde otra app) y rellena el formulario
   const analyzeImage = async (file: Blob) => {
@@ -112,6 +140,15 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
         if (data.status === 'LOST') updated.status = BetStatus.LOST;
         return updated;
       });
+      if (Array.isArray(data.legs) && data.legs.length >= MIN_LEGS) {
+        setIsParlayMode(true);
+        setLegDrafts(data.legs.map((l: { description?: string; odds?: number | null }) => ({
+          description: l.description ?? '',
+          odds: l.odds && l.odds > 1 ? String(l.odds) : '',
+          status: 'PENDING' as LegStatus,
+        })));
+        setOddsEdited(!!data.odds);
+      }
       if (data.odds) setInputOdds(data.odds.toString());
       if (data.stake) setInputStake(data.stake.toString());
     } catch (error) {
@@ -188,12 +225,34 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
       setFormError(error);
       return;
     }
+    if (isParlayMode) {
+      if (legDrafts.length < MIN_LEGS) {
+        setFormError(`Una combinada necesita al menos ${MIN_LEGS} selecciones.`);
+        return;
+      }
+      for (let i = 0; i < legDrafts.length; i++) {
+        const odds = parseDecimal(legDrafts[i].odds);
+        if (Number.isNaN(odds) || odds < MIN_ODDS) {
+          setFormError(`La cuota de la selección ${i + 1} debe ser un número mayor que 1 (por ejemplo 1.85).`);
+          return;
+        }
+      }
+    }
     setFormError(null);
+
+    const legs = isParlayMode ? draftsToLegs(legDrafts) : undefined;
+    // Cash out y anulada se eligen a mano; en el resto, el estado sale de las selecciones
+    const manualStatus = formData.status === BetStatus.CASH_OUT || formData.status === BetStatus.CANCELLED;
+    const status = legs && !manualStatus ? deriveParlayStatus(legs) : formData.status;
+    const hasVoid = !!legs && legs.some(l => l.status === 'VOID');
     onSubmit({
       ...formData,
+      status,
+      description: formData.description.trim() || (legs ? defaultParlayDescription(legs) : ''),
       bookmaker: formData.bookmaker.trim(),
-      odds: parseDecimal(inputOdds),
+      odds: legs && hasVoid && !manualStatus ? comboOdds(legs) : parseDecimal(inputOdds),
       stake: parseDecimal(inputStake),
+      legs,
       manualProfit: formData.status === BetStatus.CASH_OUT ? parseDecimal(inputManualProfit) : undefined
     });
   };
@@ -219,12 +278,12 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => { const file = firstImage(e.dataTransfer?.files); if (file) { e.preventDefault(); analyzeImage(file); } }}
             >
-              <input 
-                type="file" 
-                ref={fileInputRef} 
-                onChange={handleFileUpload} 
-                accept="image/*" 
-                className="hidden" 
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+                accept="image/*"
+                className="hidden"
               />
               <button
                 type="button"
@@ -263,9 +322,9 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
 
           <div className="space-y-2">
             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Bankroll Destino</label>
-            <select 
-              className="w-full bg-zinc-900 border border-white/10 rounded-2xl px-4 py-4 text-sm font-bold text-white outline-none focus:border-[#e2001a]" 
-              value={formData.bankrollId} 
+            <select
+              className="w-full bg-zinc-900 border border-white/10 rounded-2xl px-4 py-4 text-sm font-bold text-white outline-none focus:border-[#e2001a]"
+              value={formData.bankrollId}
               onChange={(e) => setFormData({...formData, bankrollId: e.target.value})}
             >
               {!bankrolls.some(b => b.id === formData.bankrollId) && (
@@ -301,18 +360,89 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
           {(!enabledBookmakers.some(b => b.name === formData.bookmaker) || formData.bookmaker === '') && (
             <div className="space-y-2 animate-in slide-in-from-top-2 duration-300">
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Nombre de la Casa (Manual)</label>
-              <input 
-                className="w-full bg-zinc-900 border border-white/10 rounded-2xl px-5 py-4 text-sm font-bold text-white outline-none focus:border-[#e2001a]" 
-                placeholder="Introduce el nombre de la casa" 
-                value={formData.bookmaker} 
-                onChange={(e) => setFormData({...formData, bookmaker: e.target.value})} 
+              <input
+                className="w-full bg-zinc-900 border border-white/10 rounded-2xl px-5 py-4 text-sm font-bold text-white outline-none focus:border-[#e2001a]"
+                placeholder="Introduce el nombre de la casa"
+                value={formData.bookmaker}
+                onChange={(e) => setFormData({...formData, bookmaker: e.target.value})}
               />
             </div>
           )}
 
+          {/* Tipo de apuesta: simple o combinada */}
+          <div role="tablist" aria-label="Tipo de apuesta" className="grid grid-cols-2 gap-1 p-1 bg-zinc-900 border border-white/10 rounded-2xl">
+            {([false, true] as const).map(parlay => (
+              <button
+                key={String(parlay)}
+                type="button"
+                role="tab"
+                aria-selected={isParlayMode === parlay}
+                onClick={() => setIsParlayMode(parlay)}
+                className={`py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${isParlayMode === parlay ? 'bg-[#e2001a] text-white' : 'text-slate-400 hover:text-white'}`}
+              >
+                {parlay ? 'Combinada' : 'Simple'}
+              </button>
+            ))}
+          </div>
+
+          {isParlayMode && (
+            <div className="space-y-3 animate-in slide-in-from-top-2 duration-300">
+              <div className="flex items-center justify-between px-1">
+                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Selecciones ({legDrafts.length})</span>
+                {autoOdds(legDrafts) !== null && (
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cuota total <span className="text-white">{autoOdds(legDrafts)!.toFixed(2)}</span></span>
+                )}
+              </div>
+              {legDrafts.map((leg, i) => (
+                <div key={i} className="flex flex-wrap sm:flex-nowrap items-center gap-2">
+                  <span className="w-6 text-center text-[10px] font-black text-slate-600 shrink-0">{i + 1}</span>
+                  <input
+                    aria-label={`Selección ${i + 1}`}
+                    className="flex-1 basis-[calc(100%-2rem)] sm:basis-0 min-w-0 bg-zinc-900 border border-white/10 rounded-xl px-3 py-3 text-sm font-bold text-white outline-none focus:border-[#e2001a]"
+                    placeholder="Ej: Real Madrid gana"
+                    value={leg.description}
+                    onChange={(e) => updateLeg(i, { description: e.target.value })}
+                  />
+                  <input
+                    aria-label={`Cuota de la selección ${i + 1}`}
+                    inputMode="decimal"
+                    className="w-24 sm:w-20 ml-8 sm:ml-0 bg-zinc-900 border border-white/10 rounded-xl px-2 py-3 text-sm font-black text-white text-center outline-none focus:border-[#e2001a]"
+                    placeholder="Cuota"
+                    value={leg.odds}
+                    onChange={(e) => updateLeg(i, { odds: e.target.value })}
+                  />
+                  <select
+                    aria-label={`Estado de la selección ${i + 1}`}
+                    className="flex-1 sm:flex-none sm:w-[92px] min-w-0 bg-zinc-900 border border-white/10 rounded-xl px-1 py-3 text-[10px] font-black text-white uppercase outline-none focus:border-white/20"
+                    value={leg.status}
+                    onChange={(e) => updateLeg(i, { status: e.target.value as LegStatus })}
+                  >
+                    {LEG_STATUSES.map(st => <option key={st} value={st}>{LEG_STATUS_LABELS[st]}</option>)}
+                  </select>
+                  <button
+                    type="button"
+                    aria-label={`Quitar selección ${i + 1}`}
+                    disabled={legDrafts.length <= MIN_LEGS}
+                    onClick={() => setLegDrafts(prev => prev.filter((_, idx) => idx !== i))}
+                    className="w-9 h-9 rounded-xl text-slate-500 hover:text-[#e2001a] hover:bg-white/5 disabled:opacity-30 disabled:hover:text-slate-500 flex items-center justify-center shrink-0 transition-all"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setLegDrafts(prev => [...prev, emptyLeg()])}
+                className="w-full py-3 rounded-xl border border-dashed border-white/15 text-slate-400 hover:text-white hover:border-white/30 flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all"
+              >
+                <Plus size={14} /> Añadir selección
+              </button>
+            </div>
+          )}
+
           <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Descripción del Pronóstico</label>
-            <input className="w-full bg-zinc-900 border border-white/10 rounded-2xl px-5 py-4 text-sm font-bold text-white outline-none focus:border-[#e2001a]" placeholder="Ej: Real Madrid Gana y +2.5 goles" value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} />
+            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">{isParlayMode ? 'Descripción (opcional)' : 'Descripción del Pronóstico'}</label>
+            <input className="w-full bg-zinc-900 border border-white/10 rounded-2xl px-5 py-4 text-sm font-bold text-white outline-none focus:border-[#e2001a]" placeholder={isParlayMode ? 'Si la dejas vacía se crea con las selecciones' : 'Ej: Real Madrid Gana y +2.5 goles'} value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} />
           </div>
 
           <div className="bg-zinc-950 rounded-3xl border border-white/5 p-6 space-y-4">
@@ -338,25 +468,41 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-2">
-                    <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Cuota</label>
-                    <input 
-                      type="text" 
-                      className="w-full bg-zinc-900 border border-white/5 rounded-2xl px-4 py-4 text-xl font-black text-white text-center transition-all focus:border-[#e2001a]" 
-                      value={inputOdds} 
-                      onChange={(e) => setInputOdds(e.target.value)} 
+                    <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">{isParlayMode ? 'Cuota total' : 'Cuota'}</label>
+                    <input
+                      type="text"
+                      className="w-full bg-zinc-900 border border-white/5 rounded-2xl px-4 py-4 text-xl font-black text-white text-center transition-all focus:border-[#e2001a]"
+                      value={inputOdds}
+                      onChange={(e) => { setInputOdds(e.target.value); if (isParlayMode) setOddsEdited(true); }}
                     />
+                    {isParlayMode && oddsEdited && autoOdds(legDrafts) !== null && (
+                      <button type="button" onClick={() => { setOddsEdited(false); setInputOdds(autoOdds(legDrafts)!.toFixed(2)); }} className="w-full text-[9px] font-black text-slate-500 hover:text-white uppercase tracking-widest transition-colors">
+                        Usar {autoOdds(legDrafts)!.toFixed(2)} (producto)
+                      </button>
+                    )}
                 </div>
                 <div className="space-y-2">
                     <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">{formData.freebet ? 'Importe freebet' : 'Importe (Stake)'}</label>
-                    <input 
-                      type="text" 
-                      className={`w-full bg-zinc-900 border rounded-2xl px-4 py-4 text-xl font-black text-center transition-all ${formData.freebet ? 'border-violet-500/50 text-violet-300 focus:border-violet-500' : 'border-[#e2001a]/50 text-white focus:border-[#e2001a]'}`} 
-                      value={inputStake} 
-                      onChange={(e) => setInputStake(e.target.value)} 
+                    <input
+                      type="text"
+                      className={`w-full bg-zinc-900 border rounded-2xl px-4 py-4 text-xl font-black text-center transition-all ${formData.freebet ? 'border-violet-500/50 text-violet-300 focus:border-violet-500' : 'border-[#e2001a]/50 text-white focus:border-[#e2001a]'}`}
+                      value={inputStake}
+                      onChange={(e) => setInputStake(e.target.value)}
                     />
                 </div>
                 <div className="space-y-2">
                     <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Estado Actual</label>
+                    {isParlayMode ? (
+                      <select
+                        className="w-full h-[60px] bg-zinc-900 border border-white/5 rounded-2xl px-2 text-[10px] font-black text-white uppercase text-center outline-none focus:border-white/20 transition-all"
+                        value={formData.status === BetStatus.CASH_OUT || formData.status === BetStatus.CANCELLED ? formData.status : 'AUTO'}
+                        onChange={(e) => setFormData({ ...formData, status: e.target.value === 'AUTO' ? BetStatus.PENDING : e.target.value as BetStatus })}
+                      >
+                        <option value="AUTO">⚙️ Según selecciones</option>
+                        <option value={BetStatus.CASH_OUT}>💰 CASH OUT</option>
+                        <option value={BetStatus.CANCELLED}>🚫 ANULADA</option>
+                      </select>
+                    ) : (
                     <select className="w-full h-[60px] bg-zinc-900 border border-white/5 rounded-2xl px-2 text-[10px] font-black text-white uppercase text-center outline-none focus:border-white/20 transition-all" value={formData.status} onChange={(e) => setFormData({...formData, status: e.target.value as BetStatus})}>
                         <option value={BetStatus.PENDING}>⌛ PENDIENTE</option>
                         <option value={BetStatus.WON}>✅ Ganada</option>
@@ -365,6 +511,7 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
                         <option value={BetStatus.REFUNDED}>🔄 REEMBOLSADA</option>
                         <option value={BetStatus.CANCELLED}>🚫 ANULADA</option>
                     </select>
+                    )}
                 </div>
             </div>
 
@@ -375,12 +522,12 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
                             <Banknote size={12} /> Total Cobrado/Retirado (€)
                         </label>
                         <div className="relative">
-                            <input 
+                            <input
                                 type="text"
-                                className="w-full bg-blue-500/5 border border-blue-500/20 rounded-2xl px-6 py-4 text-2xl font-black text-blue-400 text-center outline-none focus:border-blue-500/50" 
+                                className="w-full bg-blue-500/5 border border-blue-500/20 rounded-2xl px-6 py-4 text-2xl font-black text-blue-400 text-center outline-none focus:border-blue-500/50"
                                 placeholder="Ej: 162.00 para cobrar 12€ de beneficio en apuesta de 150€"
-                                value={inputManualProfit} 
-                                onChange={(e) => setInputManualProfit(e.target.value)} 
+                                value={inputManualProfit}
+                                onChange={(e) => setInputManualProfit(e.target.value)}
                             />
                             <p className="text-[8px] text-blue-400/50 font-bold text-center mt-2 uppercase">Introduce el importe TOTAL que has retirado. {formData.freebet ? 'Al ser freebet, todo lo cobrado cuenta como beneficio.' : 'El sistema calculará el beneficio/pérdida restando tu apuesta automáticamente.'}</p>
                         </div>

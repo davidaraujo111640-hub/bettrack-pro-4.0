@@ -6,6 +6,18 @@ El formato sigue [Versionado semántico](https://semver.org/lang/es/): **MAYOR.M
 - **MENOR** (1.0.1 → 1.1.0): funciones nuevas que no rompen nada de lo que ya había.
 - **MAYOR** (1.1.0 → 2.0.0): cambios grandes que obligan a los usuarios a hacer algo o cambian cómo se guardan los datos.
 
+## 1.1.0 · 8 oct 2026
+
+Apuestas combinadas.
+
+- Nueva pestaña **Simple / Combinada** al registrar una operación: varias selecciones, cada una con su descripción, su cuota y su estado.
+- La cuota total se calcula sola (producto de las selecciones) y se puede ajustar a mano, por ejemplo con cuotas potenciadas.
+- El estado de la apuesta se deduce de sus selecciones: una perdida la pierde, todas ganadas la ganan, una anulada deja de contar para la cuota.
+- En Mis Apuestas, etiqueta **COMBI ×N** que despliega las selecciones y permite marcar cada una como ganada, perdida, anulada o pendiente.
+- Los botones ✓ y ✗ de la apuesta entera también funcionan en las combinadas.
+- La IA reconoce las combinadas al leer una captura y rellena las selecciones.
+- Las selecciones se guardan en la nube, en las copias de seguridad y en la exportación a CSV (columna nueva "Selecciones").
+
 ## 1.0.0 · 8 oct 2026
 
 Primera versión numerada. Recoge todo lo hecho hasta ahora:

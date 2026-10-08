@@ -21,8 +21,8 @@ const bet = (overrides: Partial<Bet>): Bet => ({
 describe('betsToCsv', () => {
   it('genera cabecera y filas con ; y decimales con coma', () => {
     const lines = betsToCsv([bet({})], bankrolls).split('\r\n');
-    expect(lines[0]).toBe('Fecha;Bankroll;Casa;Deporte;Descripción;Cuota;Importe;Freebet;Estado;Beneficio');
-    expect(lines[1]).toBe('2026-10-01;Principal;Bet365;Fútbol;Real Madrid gana;1,85;10,00;No;Ganada;8,50');
+    expect(lines[0]).toBe('Fecha;Bankroll;Casa;Deporte;Descripción;Cuota;Importe;Freebet;Estado;Beneficio;Selecciones');
+    expect(lines[1]).toBe('2026-10-01;Principal;Bet365;Fútbol;Real Madrid gana;1,85;10,00;No;Ganada;8,50;');
   });
 
   it('ordena por fecha ascendente', () => {
@@ -33,7 +33,16 @@ describe('betsToCsv', () => {
 
   it('deja vacío el beneficio de las pendientes', () => {
     const line = betsToCsv([bet({ status: BetStatus.PENDING, profit: 0 })], bankrolls).split('\r\n')[1];
-    expect(line.endsWith(';Pendiente;')).toBe(true);
+    expect(line.endsWith(';Pendiente;;')).toBe(true);
+  });
+
+  it('añade las selecciones de una combinada', () => {
+    const line = betsToCsv([bet({ odds: 3.78, legs: [
+      { description: 'Real Madrid gana', odds: 1.8, status: 'WON' },
+      { description: 'Barça gana', odds: 2.1, status: 'PENDING' },
+    ] })], bankrolls).split('\r\n')[1];
+    expect(line.endsWith('"Real Madrid gana @1,80 (Ganada) | Barça gana @2,10 (Pendiente)"')).toBe(false);
+    expect(line.endsWith('Real Madrid gana @1,80 (Ganada) | Barça gana @2,10 (Pendiente)')).toBe(true);
   });
 
   it('escapa ; y comillas en los textos', () => {
