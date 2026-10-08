@@ -13,13 +13,8 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
     <link rel="manifest" href="/manifest.json">
     <title>BettrackAPP</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
-    <!-- Tipografías parecidas a las de los logotipos de las casas de apuestas -->
-    <!-- Se cargan sin bloquear la primera pantalla: solo se usan en los logotipos de las casas -->
-    <link href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Montserrat:ital,wght@0,700;0,800;0,900;1,800;1,900&family=Nunito:wght@800;900&family=Oswald:wght@600;700&family=Playfair+Display:ital,wght@0,700;1,700&family=Poppins:wght@600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-    <noscript><link href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Montserrat:ital,wght@0,700;0,800;0,900;1,800;1,900&family=Nunito:wght@800;900&family=Oswald:wght@600;700&family=Playfair+Display:ital,wght@0,700;1,700&family=Poppins:wght@600;700&display=swap" rel="stylesheet"></noscript>
+    <!-- Tipografías alojadas en la propia web (src/fonts.css); se precarga la principal -->
+    <link rel="preload" href="/fonts/plus-jakarta-sans-normal-400_600_800.woff2" as="font" type="font/woff2" crossorigin>
 </head>
 <body>
     <div id="root"></div>

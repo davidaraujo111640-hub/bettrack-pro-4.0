@@ -51,7 +51,7 @@ export default defineConfig({
       filename: 'sw.ts',
       injectManifest: {
         // Pantallas, estilos, iconos, logos de las casas e iconos de deportes
-        globPatterns: ['**/*.{js,css,html,svg,png,jpg,webp,ico,json}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,jpg,webp,ico,json,woff2}'],
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
       },
     }),

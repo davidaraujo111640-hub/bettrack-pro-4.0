@@ -3,9 +3,6 @@
 // avisar de versiones nuevas— y añade la recepción de imágenes desde el menú Compartir de Android.
 import { cleanupOutdatedCaches, createHandlerBoundToURL, precacheAndRoute } from 'workbox-precaching';
 import { NavigationRoute, registerRoute } from 'workbox-routing';
-import { StaleWhileRevalidate } from 'workbox-strategies';
-import { ExpirationPlugin } from 'workbox-expiration';
-import { CacheableResponsePlugin } from 'workbox-cacheable-response';
 import { SHARE_CACHE, SHARE_IMAGE_KEY } from './utils/sharedImage';
 
 // Tipado mínimo del contexto del service worker (el proyecto compila con la librería DOM, no con WebWorker)
@@ -24,18 +21,6 @@ cleanupOutdatedCaches();
 
 // Cualquier ruta abre la app, también sin conexión (salvo la API)
 registerRoute(new NavigationRoute(createHandlerBoundToURL('/index.html'), { denylist: [/^\/api\//, /^\/share-target/] }));
-
-// Tipografías de Google Fonts: se guardan la primera vez que se usan
-registerRoute(
-  ({ url }) => /^fonts\.(googleapis|gstatic)\.com$/.test(url.hostname),
-  new StaleWhileRevalidate({
-    cacheName: 'google-fonts',
-    plugins: [
-      new CacheableResponsePlugin({ statuses: [0, 200] }),
-      new ExpirationPlugin({ maxEntries: 40, maxAgeSeconds: 60 * 60 * 24 * 365 }),
-    ],
-  }),
-);
 
 // Con registerType "prompt": la app pide activar la versión nueva cuando el usuario pulsa "Actualizar"
 self.addEventListener('message', (event: { data?: { type?: string } }) => {

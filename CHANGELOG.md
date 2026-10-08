@@ -6,6 +6,14 @@ El formato sigue [Versionado semántico](https://semver.org/lang/es/): **MAYOR.M
 - **MENOR** (1.0.1 → 1.1.0): funciones nuevas que no rompen nada de lo que ya había.
 - **MAYOR** (1.1.0 → 2.0.0): cambios grandes que obligan a los usuarios a hacer algo o cambian cómo se guardan los datos.
 
+## 1.1.2 · 8 oct 2026
+
+Tipografías alojadas en la propia web.
+
+- Las tipografías (la principal y las de los logotipos de las casas) se sirven desde la propia web en vez de pedirse a Google Fonts: la primera pantalla carga antes, no se comparte ninguna visita con terceros y las letras también funcionan sin conexión.
+- Solo incluyen los caracteres latinos (suficiente para el español) y pesan 241 KB en total; el navegador baja únicamente las que usa cada pantalla.
+- Licencia SIL Open Font License 1.1, que permite alojarlas (ver `public/fonts/LICENCIAS.txt`).
+
 ## 1.1.1 · 8 oct 2026
 
 Revisión completa del proyecto: arreglos y refuerzos, sin funciones nuevas.
@@ -46,7 +54,6 @@ Revisión completa del proyecto: arreglos y refuerzos, sin funciones nuevas.
 
 **Rendimiento**
 - La aplicación se reparte en varios archivos: las actualizaciones descargan mucho menos porque las librerías grandes no cambian.
-- Las tipografías de los logotipos de las casas se cargan sin bloquear la primera pantalla.
 
 ## 1.1.0 · 8 oct 2026
 

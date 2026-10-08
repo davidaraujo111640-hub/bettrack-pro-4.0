@@ -1,0 +1,8 @@
+Tipografías de BetTrack Pro
+
+Todas las tipografías de esta carpeta se distribuyen con la licencia SIL Open Font License 1.1
+(https://openfontlicense.org), que permite usarlas, copiarlas y alojarlas libremente, también en
+proyectos comerciales. Se obtuvieron de Google Fonts (https://fonts.google.com) y se han recortado a
+los caracteres latinos.
+
+Familias: Plus Jakarta Sans, Alfa Slab One, Montserrat, Nunito, Oswald, Playfair Display, Poppins.
