@@ -1,10 +1,11 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Bet, BetStatus, Sport, Bankroll, Bookmaker } from '../types';
-import { Camera, Loader2, X, Banknote, AlertTriangle } from 'lucide-react';
+import { Camera, Loader2, X, Banknote, AlertTriangle, ClipboardPaste } from 'lucide-react';
 import { parseDecimal, validateBetForm } from '../src/utils/betMath';
 import BookmakerSelect from './BookmakerSelect';
 import SportSelect from './SportSelect';
+import { prepareImage } from '../src/utils/imagePrep';
 
 interface AddBetModalProps {
   bankrolls: Bankroll[];
@@ -17,6 +18,8 @@ interface AddBetModalProps {
   recentBookmakers?: string[];
   /** Deportes más usados, para mostrarlos arriba en el selector */
   recentSports?: string[];
+  /** Imagen de apuesta compartida desde otra app: se analiza al abrir el formulario */
+  sharedImage?: File | null;
 }
 
 const SPORTS: Sport[] = [
@@ -35,7 +38,7 @@ const SPORTS: Sport[] = [
   'Otros'
 ];
 
-const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, activeBankrollId, onClose, onSubmit, initialData, recentBookmakers, recentSports }) => {
+const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, activeBankrollId, onClose, onSubmit, initialData, recentBookmakers, recentSports, sharedImage }) => {
   const enabledBookmakers = bookmakers.filter(b => b.enabled);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isExtracting, setIsExtracting] = useState(false);
@@ -70,60 +73,104 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
     };
   });
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
+  // Lee una imagen de apuesta (subida, pegada, arrastrada o compartida desde otra app) y rellena el formulario
+  const analyzeImage = async (file: Blob) => {
     setIsExtracting(true);
     setExtractError(null);
     try {
-      const base64 = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve((reader.result as string).split(',')[1]);
-        reader.readAsDataURL(file);
-      });
+      const { base64, mimeType } = await prepareImage(file);
 
       const response = await fetch('/api/extract-bet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageData: base64, mimeType: file.type }),
+        body: JSON.stringify({ imageData: base64, mimeType }),
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.error || 'Failed to extract data');
       }
-      
+
       const data = await response.json();
-      
-      // Map extracted data to form
-      const updatedData = { ...formData };
-      if (data.match || data.selection) {
-        updatedData.description = `${data.match || ''} - ${data.selection || ''}`.trim();
-        if (updatedData.description.startsWith(' - ')) updatedData.description = updatedData.description.substring(3);
-      }
+
+      // Se parte del formulario actual (no del que había al lanzar el análisis, que puede haber cambiado)
+      setFormData(prev => {
+        const updated = { ...prev };
+        if (data.match || data.selection) {
+          updated.description = `${data.match || ''} - ${data.selection || ''}`.trim();
+          if (updated.description.startsWith(' - ')) updated.description = updated.description.substring(3);
+        }
+        if (data.bookmaker) {
+          const bookie = bookmakers.find(b => b.name.toLowerCase() === data.bookmaker.toLowerCase());
+          updated.bookmaker = bookie ? bookie.name : data.bookmaker;
+        }
+        if (data.sport) {
+          const matchedSport = SPORTS.find(s => s.toLowerCase() === data.sport.toLowerCase());
+          if (matchedSport) updated.sport = matchedSport;
+        }
+        if (data.status === 'WON') updated.status = BetStatus.WON;
+        if (data.status === 'LOST') updated.status = BetStatus.LOST;
+        return updated;
+      });
       if (data.odds) setInputOdds(data.odds.toString());
       if (data.stake) setInputStake(data.stake.toString());
-      if (data.bookmaker) {
-        const bookie = bookmakers.find(b => b.name.toLowerCase() === data.bookmaker.toLowerCase());
-        updatedData.bookmaker = bookie ? bookie.name : data.bookmaker;
-      }
-      if (data.sport) {
-        const matchedSport = SPORTS.find(s => s.toLowerCase() === data.sport.toLowerCase());
-        if (matchedSport) updatedData.sport = matchedSport;
-      }
-      if (data.status) {
-        if (data.status === 'WON') updatedData.status = BetStatus.WON;
-        if (data.status === 'LOST') updatedData.status = BetStatus.LOST;
-      }
-      
-      setFormData(updatedData);
     } catch (error) {
       console.error("Error extracting from image:", error);
       setExtractError(error instanceof Error && error.message ? error.message : "No se pudo extraer la información de la imagen. Inténtalo de nuevo o rellena los datos a mano.");
     } finally {
       setIsExtracting(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  // Los eventos de pegar y de imagen compartida llaman siempre a la versión más reciente
+  const analyzeImageRef = useRef(analyzeImage);
+  analyzeImageRef.current = analyzeImage;
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    await analyzeImage(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const firstImage = (files?: FileList | null) => Array.from(files ?? []).find(f => f.type.startsWith('image/'));
+
+  // Ctrl+V / pegar con la ventana abierta: si lo copiado es una imagen, se analiza
+  useEffect(() => {
+    if (initialData) return;
+    const onPaste = (e: ClipboardEvent) => {
+      const file = firstImage(e.clipboardData?.files);
+      if (!file) return;
+      e.preventDefault();
+      analyzeImageRef.current(file);
+    };
+    document.addEventListener('paste', onPaste);
+    return () => document.removeEventListener('paste', onPaste);
+  }, [initialData]);
+
+  // Imagen compartida desde otra app (menú Compartir de Android)
+  const analyzedShared = useRef<File | null>(null);
+  useEffect(() => {
+    if (!sharedImage || initialData || analyzedShared.current === sharedImage) return;
+    analyzedShared.current = sharedImage;
+    analyzeImageRef.current(sharedImage);
+  }, [sharedImage]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Botón "Pegar imagen": lee el portapapeles (en iPhone no hay menú Compartir hacia la app, esta es la vía)
+  const pasteFromClipboard = async () => {
+    setExtractError(null);
+    try {
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const type = item.types.find(t => t.startsWith('image/'));
+        if (type) {
+          await analyzeImage(await item.getType(type));
+          return;
+        }
+      }
+      setExtractError('No hay ninguna imagen copiada. Copia la imagen de la apuesta y vuelve a pulsar.');
+    } catch {
+      setExtractError('No se ha podido leer el portapapeles. Permite el acceso o sube la imagen con el botón de arriba.');
     }
   };
 
@@ -167,7 +214,11 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
         <form onSubmit={handleSubmit} className="p-8 space-y-6 max-h-[75vh] overflow-y-auto">
           {/* AI Screenshot Upload */}
           {!initialData && (
-            <div className="relative group">
+            <div
+              className="relative group"
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => { const file = firstImage(e.dataTransfer?.files); if (file) { e.preventDefault(); analyzeImage(file); } }}
+            >
               <input 
                 type="file" 
                 ref={fileInputRef} 
@@ -190,8 +241,17 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
                   <>
                     <Camera className="w-6 h-6 text-[#e2001a]" />
                     <span className="text-[10px] font-black text-white uppercase tracking-widest">Subir Captura de Pantalla (IA Auto-registro)</span>
+                    <span className="text-[9px] font-bold text-slate-500">También puedes arrastrarla aquí o pegarla con Ctrl+V</span>
                   </>
                 )}
+              </button>
+              <button
+                type="button"
+                disabled={isExtracting}
+                onClick={pasteFromClipboard}
+                className="mt-2 w-full py-3 rounded-2xl flex items-center justify-center gap-2 bg-white/5 border border-white/10 text-slate-300 hover:text-white hover:border-white/20 transition-all text-[10px] font-black uppercase tracking-widest disabled:opacity-50"
+              >
+                <ClipboardPaste className="w-4 h-4" /> Pegar imagen copiada
               </button>
               {extractError && (
                 <p role="alert" className="mt-3 text-[#e2001a] text-[10px] font-black uppercase text-center bg-red-500/10 py-3 px-4 rounded-xl border border-red-500/20 flex items-center justify-center gap-2">

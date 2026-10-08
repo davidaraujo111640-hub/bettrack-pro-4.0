@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Bet, BetStatus, Bankroll, Bookmaker } from '../types';
 import { getSportIcon } from '../src/utils/icons';
 import { calculateYield, calculateProfit, parseDecimal, realStake, getPayout } from '../src/utils/betMath';
@@ -18,6 +18,8 @@ interface BetListProps {
   onDelete: (id: string) => void;
   onUpdateStatus: (id: string, status: BetStatus, profit?: number) => void;
   onEdit: (bet: Bet) => void;
+  /** Apuesta recién guardada o editada: se resalta un momento con el destello */
+  justSavedId?: string | null;
 }
 
 const formatStatusText = (status: BetStatus): string => {
@@ -80,10 +82,32 @@ interface BetRowProps {
   onCashOutRequest: (bet: Bet) => void;
   /** Imagen de la casa guardada en Casas (puede ser una subida por el usuario) */
   bookmakerIcon?: string;
+  /** Esta apuesta se acaba de guardar o editar */
+  justSaved?: boolean;
 }
 
-const BetRow: React.FC<BetRowProps> = React.memo(({ bet, visibleColumns, onUpdateStatus, onEdit, onDeleteRequest, onCashOutRequest, bookmakerIcon }) => {
+const CELEBRATION_MS = 1500;
+
+const BetRow: React.FC<BetRowProps> = React.memo(({ bet, visibleColumns, onUpdateStatus, onEdit, onDeleteRequest, onCashOutRequest, bookmakerIcon, justSaved }) => {
   const payout = getPayout(bet);
+
+  // Destello al marcar como ganada (o al guardar): una franja que cruza la fila y un rebote del badge.
+  // 'won' es verde; 'saved' es un destello neutro para apuestas guardadas que no están ganadas.
+  const [flash, setFlash] = useState<{ kind: 'won' | 'saved'; n: number } | null>(null);
+  const prevStatus = useRef(bet.status);
+  useEffect(() => {
+    if (prevStatus.current !== BetStatus.WON && bet.status === BetStatus.WON) setFlash(f => ({ kind: 'won', n: (f?.n ?? 0) + 1 }));
+    prevStatus.current = bet.status;
+  }, [bet.status]);
+  useEffect(() => {
+    if (justSaved) setFlash(f => ({ kind: bet.status === BetStatus.WON ? 'won' : 'saved', n: (f?.n ?? 0) + 1 }));
+  }, [justSaved]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!flash) return;
+    const t = setTimeout(() => setFlash(null), CELEBRATION_MS);
+    return () => clearTimeout(t);
+  }, [flash]);
+  const badgePop = flash?.kind === 'won' ? 'bt-badge-pop' : '';
   return (
     <motion.div 
       layout
@@ -91,9 +115,10 @@ const BetRow: React.FC<BetRowProps> = React.memo(({ bet, visibleColumns, onUpdat
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
       whileHover={{ scale: 1.005 }}
-      className="glass-panel rounded-xl md:rounded-2xl p-2 md:p-3 lg:p-4 flex flex-col lg:flex-row items-center gap-2 lg:gap-3 group transition-all w-full overflow-hidden"
+      className="glass-panel relative rounded-xl md:rounded-2xl p-2 md:p-3 lg:p-4 flex flex-col lg:flex-row items-center gap-2 lg:gap-3 group transition-all w-full overflow-hidden"
       style={getRowStyle(bet.status)}
     >
+      {flash && <span key={flash.n} aria-hidden="true" className={`bt-sweep bt-sweep--play ${flash.kind === 'saved' ? 'bt-sweep--saved' : ''}`} />}
       {/* Contenedor Principal (Info + Stats en Móvil) */}
       <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0 w-full overflow-hidden">
         {visibleColumns.sportIcon && (
@@ -173,7 +198,7 @@ const BetRow: React.FC<BetRowProps> = React.memo(({ bet, visibleColumns, onUpdat
                   <button onClick={() => onCashOutRequest(bet)} title="Cash out" aria-label="Cash out" className="w-8 h-8 rounded-lg bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500 hover:text-black transition-all flex items-center justify-center shrink-0"><Banknote size={14} /></button>
                 </div>
               ) : (
-                <div className={`px-2 py-0.5 rounded-lg text-[7px] font-black uppercase tracking-widest whitespace-nowrap ${getStatusStyle(bet.status)}`}>
+                <div className={`px-2 py-0.5 rounded-lg text-[7px] font-black uppercase tracking-widest whitespace-nowrap ${getStatusStyle(bet.status)} ${badgePop}`}>
                   {formatStatusText(bet.status)}
                 </div>
               )}
@@ -190,7 +215,7 @@ const BetRow: React.FC<BetRowProps> = React.memo(({ bet, visibleColumns, onUpdat
       {!visibleColumns.profit && false /* Placeholder for logic simplified below */}
       {visibleColumns.actions && (
         <div className="lg:hidden flex items-center justify-between w-full border-t border-white/5 pt-2 mt-1">
-          <div className={`px-2 py-0.5 rounded-lg text-[7px] font-black uppercase tracking-widest ${getStatusStyle(bet.status)}`}>
+          <div className={`px-2 py-0.5 rounded-lg text-[7px] font-black uppercase tracking-widest ${getStatusStyle(bet.status)} ${badgePop}`}>
             {formatStatusText(bet.status)}
           </div>
           <div className="flex items-center gap-1">
@@ -210,7 +235,7 @@ const BetRow: React.FC<BetRowProps> = React.memo(({ bet, visibleColumns, onUpdat
   );
 });
 
-const BetList: React.FC<BetListProps> = ({ bets, allBets, bookmakers, bankrolls, activeBankrollName, onDelete, onUpdateStatus, onEdit }) => {
+const BetList: React.FC<BetListProps> = ({ bets, allBets, bookmakers, bankrolls, activeBankrollName, onDelete, onUpdateStatus, onEdit, justSavedId }) => {
   const bookmakerIcons = useMemo(
     () => new Map(bookmakers.map(b => [b.name.toLowerCase(), b.icon])),
     [bookmakers]
@@ -637,6 +662,7 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bookmakers, bankrolls,
                             onDeleteRequest={setBetToDelete}
                             onCashOutRequest={(b: Bet) => { setBetToCashOut(b); setCashOutAmount(''); }}
                             bookmakerIcon={bookmakerIcons.get(bet.bookmaker.toLowerCase())}
+                            justSaved={bet.id === justSavedId}
                           />
                         ))}
                       </AnimatePresence>

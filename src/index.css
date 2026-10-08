@@ -81,3 +81,27 @@ html {
 @media (prefers-reduced-motion: reduce) {
     .bt-logo, .bt-logo .bt-logo-line, .bt-logo .bt-logo-head { animation: none; stroke-dashoffset: 0; }
 }
+
+/* Destello al marcar una apuesta como ganada o al guardarla: una franja que cruza la fila
+   y un pequeño rebote del badge de estado. Muy breve (≈1 s) para no cansar. */
+.bt-sweep {
+  position: absolute; top: 0; bottom: 0; left: 0; width: 28%;
+  pointer-events: none; opacity: 0;
+  background: rgba(16, 185, 129, 0.28);
+  transform: translateX(-130%) skewX(-18deg);
+}
+.bt-sweep--saved { background: rgba(255, 255, 255, 0.08); }
+.bt-sweep--play { animation: bt-sweep 0.9s ease-in-out; }
+.bt-badge-pop { animation: bt-badge-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 0.35s; }
+@keyframes bt-sweep {
+  0% { opacity: 1; transform: translateX(-130%) skewX(-18deg); }
+  100% { opacity: 0; transform: translateX(480%) skewX(-18deg); }
+}
+@keyframes bt-badge-pop {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.18); }
+  100% { transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bt-sweep--play, .bt-badge-pop { animation: none; }
+}

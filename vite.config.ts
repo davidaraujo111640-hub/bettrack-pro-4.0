@@ -15,26 +15,15 @@ export default defineConfig({
       registerType: 'prompt',
       // Se usa public/manifest.json tal cual
       manifest: false,
-      workbox: {
+      // Service worker propio (src/sw.ts): además de guardar la app para usarla sin conexión,
+      // recibe las imágenes compartidas desde otras apps (menú Compartir de Android)
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
+      injectManifest: {
         // Pantallas, estilos, iconos, logos de las casas e iconos de deportes
         globPatterns: ['**/*.{js,css,html,svg,png,jpg,webp,ico,json}'],
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
-        // Cualquier ruta abre la app (sin conexión también), salvo la API
-        navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/api\//],
-        cleanupOutdatedCaches: true,
-        runtimeCaching: [
-          {
-            // Tipografías de Google Fonts: se guardan la primera vez que se usan
-            urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/i,
-            handler: 'StaleWhileRevalidate',
-            options: {
-              cacheName: 'google-fonts',
-              expiration: { maxEntries: 40, maxAgeSeconds: 60 * 60 * 24 * 365 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-        ],
       },
     }),
   ],

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { HashRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import Dashboard from './components/Dashboard';
 import BetList from './components/BetList';
@@ -20,6 +20,7 @@ import { calculateProfit, calculateRoi, calculateYield, realStake } from './src/
 import { BackupData, downloadBackup, parseBackup } from './src/utils/backup';
 import { supabase, toAppUser } from './src/lib/supabase';
 import { useCloudSync } from './src/lib/useCloudSync';
+import { takeSharedImage } from './src/utils/sharedImage';
 import type { CloudData } from './src/lib/cloudSync';
 
 const DEFAULT_BANKROLL: Bankroll = { id: 'default', name: 'Bankroll Principal', initialCapital: 1000, color: '#e2001a' };
@@ -104,6 +105,16 @@ const App: React.FC = () => {
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [pendingRestore, setPendingRestore] = useState<BackupData | null>(null);
+  // Imagen compartida desde otra app (menú Compartir de Android) pendiente de analizar
+  const [sharedImage, setSharedImage] = useState<File | null>(null);
+  // Apuesta recién guardada: la lista la resalta un momento con el destello
+  const [justSavedId, setJustSavedId] = useState<string | null>(null);
+  const justSavedTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const flashSaved = useCallback((id: string) => {
+    setJustSavedId(id);
+    clearTimeout(justSavedTimer.current);
+    justSavedTimer.current = setTimeout(() => setJustSavedId(null), 2000);
+  }, []);
 
   const updateLastSaved = useCallback(() => setLastSaved(new Date().toLocaleTimeString()), []);
 
@@ -158,6 +169,32 @@ const App: React.FC = () => {
     emptyData,
   });
 
+  // La imagen compartida solo vale para la ventana que se abrió con ella
+  useEffect(() => {
+    if (!isAddModalOpen) setSharedImage(null);
+  }, [isAddModalOpen]);
+
+  // Compartir desde otra app: el service worker deja la imagen en una caché; en cuanto la sesión y los datos
+  // están listos, se abre "Nueva apuesta" con ella. Si lo compartido no era una imagen, se avisa.
+  useEffect(() => {
+    if (cloud.status !== 'ready') return;
+    const params = new URLSearchParams(window.location.search);
+    const share = params.get('share');
+    if (share) {
+      params.delete('share');
+      const query = params.toString();
+      window.history.replaceState(null, '', window.location.pathname + (query ? '?' + query : '') + window.location.hash);
+    }
+    if (share === 'other') showToast('Solo se pueden leer imágenes. Comparte la captura de la apuesta.', 'info');
+    if (!('caches' in window)) return;
+    takeSharedImage(caches).then(file => {
+      if (!file) return;
+      setEditingBet(null);
+      setSharedImage(file);
+      setIsAddModalOpen(true);
+    });
+  }, [cloud.status, showToast]);
+
   const filteredBets = useMemo(() => {
     if (activeBankrollId === 'all') {
       const activeBankrollIds = new Set(bankrolls.filter(b => !b.archived).map(b => b.id));
@@ -205,18 +242,20 @@ const App: React.FC = () => {
       setBankrolls(prev => [...prev, defaultBankroll]);
     }
 
+    const savedId = editingBet ? editingBet.id : crypto.randomUUID();
     setBets(prevBets => {
       if (editingBet) {
         return prevBets.map(b => b.id === editingBet.id ? { ...betData, id: editingBet.id, profit } : b);
       } else {
         const betWithId: Bet = {
           ...betData,
-          id: crypto.randomUUID(),
+          id: savedId,
           profit
         };
         return [betWithId, ...prevBets];
       }
     });
+    flashSaved(savedId);
 
     if (editingBet) {
       showToast('Operación actualizada');
@@ -226,7 +265,7 @@ const App: React.FC = () => {
     }
     setIsAddModalOpen(false);
     updateLastSaved();
-  }, [editingBet, showToast, updateLastSaved, bankrolls]);
+  }, [editingBet, showToast, updateLastSaved, bankrolls, flashSaved]);
 
   const handleUpdateStatus = useCallback((id: string, newStatus: BetStatus, manualProfit?: number) => {
     setBets(prevBets => prevBets.map(bet => {
@@ -541,7 +580,7 @@ const App: React.FC = () => {
           <div className="max-w-6xl mx-auto">
             <Routes>
               <Route path="/" element={<Dashboard stats={stats} bets={filteredBets} userName={user?.name} userPlan={user?.plan} onProfileClick={() => setIsProfileModalOpen(true)} syncState={cloud.syncState} onSyncClick={() => showToast(cloud.syncState === 'synced' ? 'Guardado en la nube' : cloud.syncState === 'pending' ? 'Sincronizando…' : 'Sin conexión: los cambios se subirán al volver internet', cloud.syncState === 'offline' ? 'info' : 'success')} />} />
-              <Route path="/bets" element={<BetList bets={filteredBets} allBets={bets} bookmakers={bookmakers} bankrolls={bankrolls} activeBankrollName={activeBankrollName} onDelete={handleDeleteBet} onUpdateStatus={handleUpdateStatus} onEdit={handleEdit} />} />
+              <Route path="/bets" element={<BetList bets={filteredBets} allBets={bets} bookmakers={bookmakers} bankrolls={bankrolls} activeBankrollName={activeBankrollName} onDelete={handleDeleteBet} onUpdateStatus={handleUpdateStatus} onEdit={handleEdit} justSavedId={justSavedId} />} />
               <Route path="/statistics" element={<Statistics bets={filteredBets} stats={stats} bankrolls={bankrolls} activeBankrollId={activeBankrollId} onSelectBankroll={handleSetActiveBankroll} />} />
               <Route path="/bankrolls" element={<BankrollManager bankrolls={bankrolls} bets={bets} onUpdate={setBankrolls} activeBankrollId={activeBankrollId} onSelect={handleSetActiveBankroll} onExportBackup={handleExportBackup} onImportBackup={handleImportBackupFile} localBackup={localBackup ? { bets: localBackup.bets.length, bankrolls: localBackup.bankrolls.length } : null} onRestoreLocalBackup={handleRestoreLocalBackup} onDownloadLocalBackup={handleDownloadLocalBackup} />} />
               <Route path="/bookmakers" element={<BookmakerManager bookmakers={bookmakers} onUpdate={setBookmakers} />} />
@@ -560,6 +599,7 @@ const App: React.FC = () => {
             initialData={editingBet || undefined}
             recentBookmakers={recentBookmakers}
             recentSports={recentSports}
+            sharedImage={sharedImage}
           />
         )}
 
