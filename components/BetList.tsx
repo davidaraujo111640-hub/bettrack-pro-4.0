@@ -151,6 +151,7 @@ const BetRow: React.FC<BetRowProps> = React.memo(({ bet, visibleColumns, onUpdat
                 <ChevronDown size={10} className={`transition-transform ${expanded ? 'rotate-180' : ''}`} />
               </button>
             )}
+            {bet.live && <span title="Apuesta en directo (live)" className="px-1.5 py-0.5 rounded-md bg-[#e2001a] text-white text-[9px] md:text-[10px] font-black tracking-wider shrink-0 flex items-center gap-1"><span className="w-1 h-1 rounded-full bg-white animate-pulse" />LIVE</span>}
             {bet.freebet && <span title="Freebet (apuesta gratis)" className="px-1.5 py-0.5 rounded-md bg-violet-500 text-white text-[9px] md:text-[10px] font-black tracking-wider shrink-0">FB</span>}
             {visibleColumns.date && (
               <span className="text-[8px] font-bold text-slate-500 uppercase tracking-tighter flex items-center gap-0.5 shrink-0 whitespace-nowrap">
@@ -319,7 +320,7 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bookmakers, bankrolls,
 
   const filteredBets = useMemo(() => {
     return bets.filter(b => {
-      const matchesStatus = statusFilter === 'ALL' || b.status === statusFilter;
+      const matchesStatus = statusFilter === 'ALL' || (statusFilter === 'LIVE' ? !!b.live : b.status === statusFilter);
       const matchesBookmaker = bookmakerFilter === 'ALL' || b.bookmaker === bookmakerFilter;
       const matchesSearch = b.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
                             b.bookmaker.toLowerCase().includes(searchTerm.toLowerCase());
@@ -587,7 +588,7 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bookmakers, bankrolls,
         </div>
 
         <div className="flex bg-zinc-950 p-1.5 rounded-2xl border border-white/5 gap-1 overflow-x-auto no-scrollbar">
-            {['ALL', 'PENDING', 'WON', 'LOST', 'CASH_OUT'].map(f => (
+            {['ALL', 'PENDING', 'WON', 'LOST', 'CASH_OUT', 'LIVE'].map(f => (
                 <button
                 key={f}
                 onClick={() => setStatusFilter(f)}
@@ -595,7 +596,7 @@ const BetList: React.FC<BetListProps> = ({ bets, allBets, bookmakers, bankrolls,
                     statusFilter === f ? 'bg-[#e2001a] text-white shadow-lg shadow-red-900/20' : 'text-slate-500 hover:text-white hover:bg-white/5'
                 }`}
                 >
-                {f === 'ALL' ? 'Todas' : f === 'PENDING' ? 'Activas' : formatStatusText(f as BetStatus)}
+                {f === 'ALL' ? 'Todas' : f === 'PENDING' ? 'Activas' : f === 'LIVE' ? 'Live' : formatStatusText(f as BetStatus)}
                 </button>
             ))}
         </div>

@@ -112,6 +112,7 @@ function parseBet(raw: unknown): Bet | null {
     sport: (typeof raw.sport === 'string' ? raw.sport : 'Otros') as Bet['sport'],
     description: typeof raw.description === 'string' ? raw.description : '',
     ...(raw.freebet === true ? { freebet: true } : {}),
+    ...(raw.live === true ? { live: true } : {}),
     ...(legs ? { legs } : {}),
   };
 }

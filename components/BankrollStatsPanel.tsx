@@ -70,6 +70,7 @@ const GroupTable: React.FC<{ title: string; rows: GroupStats[]; label?: (k: stri
 /** Estadísticas completas de las apuestas del bankroll seleccionado. */
 const BankrollStatsPanel: React.FC<Props> = ({ bets, initialCapital, bankrollName }) => {
   const s = useMemo(() => computeBetStats(bets, initialCapital), [bets, initialCapital]);
+  const liveProfit = s.byMode.find(r => r.key === 'Live')?.profit ?? 0;
   const streak = s.currentStreak === 0 ? '—' : s.currentStreak > 0 ? `${s.currentStreak} ganada${s.currentStreak > 1 ? 's' : ''}` : `${-s.currentStreak} perdida${s.currentStreak < -1 ? 's' : ''}`;
 
   return (
@@ -114,6 +115,8 @@ const BankrollStatsPanel: React.FC<Props> = ({ bets, initialCapital, bankrollNam
             <Stat label="Mayor pérdida" value={eur(s.biggestLoss)} className="text-[#e2001a]" />
             <Stat label="Pérdida bruta" value={eur(-s.grossLosses)} className="text-[#e2001a]" />
             <Stat label="Freebets" value={String(s.freebets)} className="text-violet-300" hint="Apuestas gratis registradas" />
+            <Stat label="Apuestas live" value={String(s.live)} className="text-[#e2001a]" hint="Apuestas hechas en directo, con el partido en juego" />
+            <Stat label="Beneficio live" value={eur(liveProfit, true)} className={tone(liveProfit)} hint="Lo ganado o perdido en directo (ya incluido en el beneficio)" />
             <Stat label="Beneficio freebets" value={eur(s.freebetProfit, true)} className={tone(s.freebetProfit)} hint="Lo ganado con apuestas gratis (ya incluido en el beneficio)" />
           </div>
         </Section>
@@ -128,6 +131,7 @@ const BankrollStatsPanel: React.FC<Props> = ({ bets, initialCapital, bankrollNam
       </div>
 
       <div className="grid grid-cols-1 2xl:grid-cols-2 gap-4">
+        <GroupTable title="Prepartido vs Live" rows={s.byMode} />
         <GroupTable title="Por casa de apuestas" rows={s.byBookmaker} />
         <GroupTable title="Por deporte" rows={s.bySport} />
         <GroupTable title="Por rango de cuota" rows={s.byOdds} />

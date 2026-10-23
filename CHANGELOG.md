@@ -6,6 +6,15 @@ El formato sigue [Versionado semántico](https://semver.org/lang/es/): **MAYOR.M
 - **MENOR** (1.0.1 → 1.1.0): funciones nuevas que no rompen nada de lo que ya había.
 - **MAYOR** (1.1.0 → 2.0.0): cambios grandes que obligan a los usuarios a hacer algo o cambian cómo se guardan los datos.
 
+## 1.3.0 · 23 oct 2026
+
+Apuestas en directo (live).
+
+- Nuevo interruptor **Apuesta en directo** al registrar o editar una operación, junto al de freebet. Sirve tanto para apuestas simples como para combinadas.
+- En **Mis Apuestas**, las apuestas live llevan la etiqueta **LIVE** y hay un filtro **Live** para verlas todas juntas.
+- En **Estadísticas**: tabla nueva **Prepartido vs Live** con apuestas, acierto, apostado, yield y beneficio de cada modalidad (siempre salen las dos filas), y fichas con el número de apuestas live y su beneficio.
+- La marca live se guarda en la nube, en las copias de seguridad y en la exportación a CSV (columna nueva "Live"). Las apuestas anteriores cuentan como prepartido.
+
 ## 1.2.0 · 8 oct 2026
 
 Gráficas a pantalla completa y en horizontal.

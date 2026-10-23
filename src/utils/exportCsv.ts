@@ -28,7 +28,7 @@ function textCell(value: string): string {
 
 export function betsToCsv(bets: Bet[], bankrolls: Bankroll[]): string {
   const bankrollNames = new Map(bankrolls.map(b => [b.id, b.name]));
-  const header = ['Fecha', 'Bankroll', 'Casa', 'Deporte', 'Descripción', 'Cuota', 'Importe', 'Freebet', 'Estado', 'Beneficio', 'Selecciones'];
+  const header = ['Fecha', 'Bankroll', 'Casa', 'Deporte', 'Descripción', 'Cuota', 'Importe', 'Freebet', 'Live', 'Estado', 'Beneficio', 'Selecciones'];
 
   const rows = [...bets]
     .sort((a, b) => a.date.localeCompare(b.date))
@@ -41,6 +41,7 @@ export function betsToCsv(bets: Bet[], bankrolls: Bankroll[]): string {
       formatNumber(bet.odds),
       formatNumber(bet.stake),
       bet.freebet ? 'Sí' : 'No',
+      bet.live ? 'Sí' : 'No',
       STATUS_LABELS[bet.status] ?? bet.status,
       bet.status === BetStatus.PENDING ? '' : formatNumber(bet.profit),
       textCell(legsToText(bet.legs)),

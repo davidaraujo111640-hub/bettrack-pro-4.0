@@ -51,6 +51,8 @@ export interface Bet {
   description: string;
   /** Freebet (apuesta gratis): si se pierde no resta el importe; si se gana, solo cuenta la ganancia neta */
   freebet?: boolean;
+  /** Apuesta en directo (live): se hizo con el partido ya en juego */
+  live?: boolean;
   /** Selecciones, si es una combinada (2 o más). `odds` es entonces la cuota total. */
   legs?: BetLeg[];
 }

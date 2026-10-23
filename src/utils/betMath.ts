@@ -185,6 +185,8 @@ export interface BetStats {
   /** Número de freebets y beneficio obtenido con ellas */
   freebets: number;
   freebetProfit: number;
+  /** Número de apuestas live (en directo) */
+  live: number;
   avgOdds: number;
   avgOddsWon: number;
   biggestWin: number;
@@ -197,6 +199,8 @@ export interface BetStats {
   worstLoseStreak: number;
   /** Racha actual: positiva = ganadas seguidas, negativa = perdidas seguidas */
   currentStreak: number;
+  /** Prepartido y live, siempre las dos filas (aunque no haya ninguna live) */
+  byMode: GroupStats[];
   byBookmaker: GroupStats[];
   bySport: GroupStats[];
   byOdds: GroupStats[];
@@ -242,9 +246,12 @@ function group(bets: Bet[], keyOf: (b: Bet) => string, order?: string[]): GroupS
   return order ? rows.sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key)) : rows.sort((a, b) => b.profit - a.profit);
 }
 
+const MODES = ['Prepartido', 'Live'] as const;
+
 /** Estadísticas completas de un conjunto de apuestas (por ejemplo, las de un bankroll). */
 export function computeBetStats(bets: Bet[], initialCapital: number): BetStats {
   const settled = bets.filter(counts);
+  const modeRows = group(bets, b => (b.live ? 'Live' : 'Prepartido'), [...MODES]);
   const pending = bets.filter(b => b.status === BetStatus.PENDING);
   const freebets = bets.filter(b => b.freebet);
   const realBets = bets.filter(b => !b.freebet);
@@ -283,6 +290,7 @@ export function computeBetStats(bets: Bet[], initialCapital: number): BetStats {
     maxStake: realBets.length ? Math.max(...realBets.map(b => b.stake)) : 0,
     freebets: freebets.length,
     freebetProfit: round2(freebets.filter(counts).reduce((a, b) => a + b.profit, 0)),
+    live: bets.filter(b => b.live).length,
     avgOdds: bets.length ? round2(bets.reduce((a, b) => a + b.odds, 0) / bets.length) : 0,
     avgOddsWon: wins.length ? round2(wins.reduce((a, b) => a + b.odds, 0) / wins.length) : 0,
     biggestWin: settled.length ? Math.max(0, ...settled.map(b => b.profit)) : 0,
@@ -293,6 +301,7 @@ export function computeBetStats(bets: Bet[], initialCapital: number): BetStats {
     bestWinStreak: best,
     worstLoseStreak: -worst,
     currentStreak: run,
+    byMode: MODES.map(key => modeRows.find(r => r.key === key) ?? { key, bets: 0, won: 0, lost: 0, staked: 0, profit: 0, yield: 0, winRate: 0 }),
     byBookmaker: group(bets, b => b.bookmaker || 'Sin casa'),
     bySport: group(bets, b => b.sport),
     byOdds: group(bets, b => ODDS_RANGES.find(([, lo, hi]) => b.odds >= lo && b.odds < hi)?.[0] ?? '≥ 5.00', ODDS_RANGES.map(r => r[0])),

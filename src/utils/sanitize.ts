@@ -53,6 +53,7 @@ export function sanitizeBet(raw: unknown): Bet | null {
     profit: raw.profit,
     description: str(raw.description),
     ...(raw.freebet === true ? { freebet: true } : {}),
+    ...(raw.live === true ? { live: true } : {}),
     ...(legs ? { legs } : {}),
   };
 }

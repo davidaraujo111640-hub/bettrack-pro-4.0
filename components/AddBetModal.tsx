@@ -84,6 +84,7 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
         status: initialData.status,
         description: initialData.description,
         freebet: !!initialData.freebet,
+        live: !!initialData.live,
       };
     }
     return {
@@ -95,6 +96,7 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
       status: BetStatus.PENDING,
       description: '',
       freebet: false,
+      live: false,
     };
   });
 
@@ -257,6 +259,7 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
       odds: legs && hasVoid && !manualStatus ? comboOdds(legs) : parseDecimal(oddsValue),
       stake: parseDecimal(inputStake),
       legs,
+      live: formData.live ? true : undefined,
       manualProfit: formData.status === BetStatus.CASH_OUT ? parseDecimal(inputManualProfit) : undefined
     });
   };
@@ -467,6 +470,28 @@ const AddBetModal: React.FC<AddBetModalProps> = ({ bankrolls, bookmakers, active
               </span>
               <span className={`relative w-10 h-6 rounded-full shrink-0 transition-all ${formData.freebet ? 'bg-violet-500' : 'bg-zinc-700'}`}>
                 <span className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${formData.freebet ? 'left-5' : 'left-1'}`} />
+              </span>
+            </button>
+
+            {/* Live: apuesta en directo, con el partido ya en juego (las estadísticas la cuentan aparte) */}
+            <button
+              type="button"
+              role="switch"
+              aria-checked={formData.live}
+              onClick={() => setFormData({ ...formData, live: !formData.live })}
+              className={`w-full flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 transition-all ${formData.live ? 'bg-[#e2001a]/10 border-[#e2001a]/40' : 'bg-zinc-900 border-white/5 hover:border-white/15'}`}
+            >
+              <span className="flex items-center gap-3 text-left">
+                <span className={`px-2 py-1 rounded-lg text-[11px] font-black tracking-wider flex items-center gap-1.5 ${formData.live ? 'bg-[#e2001a] text-white' : 'bg-zinc-800 text-zinc-500'}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full bg-current ${formData.live ? 'animate-pulse' : ''}`} />LIVE
+                </span>
+                <span>
+                  <span className="block text-[11px] font-black text-white uppercase tracking-widest">Apuesta en directo</span>
+                  <span className="block text-[9px] font-bold text-zinc-500">Hecha con el partido ya en juego: se muestra aparte en las estadísticas</span>
+                </span>
+              </span>
+              <span className={`relative w-10 h-6 rounded-full shrink-0 transition-all ${formData.live ? 'bg-[#e2001a]' : 'bg-zinc-700'}`}>
+                <span className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${formData.live ? 'left-5' : 'left-1'}`} />
               </span>
             </button>
 
